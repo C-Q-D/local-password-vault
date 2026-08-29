@@ -23,6 +23,20 @@ pub fn open_or_initialize(
     }
 }
 
+/// 保存完整候选后重新读取和认证磁盘主库，只返回已经确认的文档。
+pub fn save_confirmed(
+    files: &impl VaultFiles,
+    key_protector: &impl KeyProtector,
+    candidate: &VaultDocument,
+) -> Result<VaultDocument, VaultOpenError> {
+    let envelope = seal(candidate, key_protector).map_err(VaultOpenError::Envelope)?;
+    files
+        .replace_main(&envelope)
+        .map_err(VaultOpenError::File)?;
+    let confirmed_envelope = files.read_main().map_err(VaultOpenError::File)?;
+    open_envelope(&confirmed_envelope, key_protector).map_err(VaultOpenError::Envelope)
+}
+
 fn initialize(
     files: &impl VaultFiles,
     key_protector: &impl KeyProtector,
@@ -66,6 +80,8 @@ mod tests {
     #[derive(Default)]
     struct MemoryFiles {
         main: Mutex<Option<Vec<u8>>>,
+        fail_replace: bool,
+        corrupt_replacement: bool,
     }
 
     impl VaultFiles for MemoryFiles {
@@ -75,6 +91,22 @@ mod tests {
                 return Err(VaultFileError::AlreadyExists);
             }
             *main = Some(candidate.to_vec());
+            Ok(())
+        }
+
+        fn replace_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+            if self.fail_replace {
+                return Err(VaultFileError::Io);
+            }
+            let mut main = self.main.lock().expect("测试互斥锁不应中毒");
+            if main.is_none() {
+                return Err(VaultFileError::NotFound);
+            }
+            *main = Some(if self.corrupt_replacement {
+                b"corrupted-replacement".to_vec()
+            } else {
+                candidate.to_vec()
+            });
             Ok(())
         }
 
@@ -129,6 +161,7 @@ mod tests {
     fn corrupted_existing_main_is_not_replaced_with_empty_vault() {
         let files = MemoryFiles {
             main: Mutex::new(Some(b"corrupted-main".to_vec())),
+            ..MemoryFiles::default()
         };
 
         assert!(matches!(
@@ -151,5 +184,63 @@ mod tests {
 
         assert!(!opened.initialized);
         assert_eq!(files.read_main(), Ok(envelope));
+    }
+
+    #[test]
+    fn valid_candidate_is_saved_and_reopened_from_confirmed_bytes() {
+        let files = MemoryFiles::default();
+        open_or_initialize(&files, &TestKeyProtector).expect("应先创建主库");
+        let mut candidate = VaultDocument::empty();
+        candidate.revision = 1;
+        candidate
+            .create_category("工作")
+            .expect("测试分类应创建成功");
+
+        let confirmed =
+            save_confirmed(&files, &TestKeyProtector, &candidate).expect("候选应保存成功");
+
+        assert_eq!(confirmed, candidate);
+        let reopened = open_or_initialize(&files, &TestKeyProtector).expect("保存后应能重开");
+        assert_eq!(reopened.document, candidate);
+    }
+
+    #[test]
+    fn replace_failure_keeps_previous_main_and_does_not_return_candidate() {
+        let files = MemoryFiles::default();
+        open_or_initialize(&files, &TestKeyProtector).expect("应先创建主库");
+        let previous = files.read_main().expect("主库应存在");
+        let failing_files = MemoryFiles {
+            main: Mutex::new(Some(previous.clone())),
+            fail_replace: true,
+            corrupt_replacement: false,
+        };
+        let mut candidate = VaultDocument::empty();
+        candidate.revision = 1;
+
+        assert_eq!(
+            save_confirmed(&failing_files, &TestKeyProtector, &candidate),
+            Err(VaultOpenError::File(VaultFileError::Io))
+        );
+        assert_eq!(failing_files.read_main(), Ok(previous));
+    }
+
+    #[test]
+    fn corrupted_replacement_is_not_returned_as_confirmed_document() {
+        let files = MemoryFiles::default();
+        open_or_initialize(&files, &TestKeyProtector).expect("应先创建主库");
+        let corrupting_files = MemoryFiles {
+            main: Mutex::new(files.main.lock().expect("测试互斥锁不应中毒").clone()),
+            fail_replace: false,
+            corrupt_replacement: true,
+        };
+
+        assert!(matches!(
+            save_confirmed(
+                &corrupting_files,
+                &TestKeyProtector,
+                &VaultDocument::empty()
+            ),
+            Err(VaultOpenError::Envelope(_))
+        ));
     }
 }

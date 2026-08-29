@@ -9,7 +9,10 @@ use std::{
 };
 
 use vault_storage::{MAX_ENVELOPE_SIZE, VaultFileError, VaultFiles};
-use windows::{Win32::Storage::FileSystem::MoveFileW, core::PCWSTR};
+use windows::{
+    Win32::Storage::FileSystem::{MoveFileW, REPLACE_FILE_FLAGS, ReplaceFileW},
+    core::PCWSTR,
+};
 
 const MAIN_FILE_NAME: &str = "vault.dat";
 const TEMP_CREATE_ATTEMPTS: usize = 32;
@@ -110,6 +113,50 @@ impl VaultFiles for WindowsVaultFiles {
         }
         Ok(bytes)
     }
+
+    fn replace_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+        if candidate.is_empty() {
+            return Err(VaultFileError::EmptyCandidate);
+        }
+        if candidate.len() > MAX_ENVELOPE_SIZE {
+            return Err(VaultFileError::TooLarge);
+        }
+
+        let main_path = self.main_path();
+        if !main_path.try_exists().map_err(|_| VaultFileError::Io)? {
+            return Err(VaultFileError::NotFound);
+        }
+
+        let mut temporary = self.create_owned_temp()?;
+        temporary
+            .file_mut()
+            .write_all(candidate)
+            .map_err(|_| VaultFileError::Io)?;
+        temporary
+            .file_mut()
+            .sync_all()
+            .map_err(|_| VaultFileError::Io)?;
+        temporary.close();
+
+        let main_wide = wide_path(&main_path);
+        let temp_wide = wide_path(temporary.path());
+        let replace_result = unsafe {
+            ReplaceFileW(
+                PCWSTR::from_raw(main_wide.as_ptr()),
+                PCWSTR::from_raw(temp_wide.as_ptr()),
+                PCWSTR::null(),
+                REPLACE_FILE_FLAGS(0),
+                None,
+                None,
+            )
+        };
+        if replace_result.is_err() {
+            return Err(VaultFileError::Io);
+        }
+
+        temporary.mark_published();
+        Ok(())
+    }
 }
 
 fn wide_path(path: &Path) -> Vec<u16> {
@@ -194,6 +241,28 @@ mod tests {
             files.publish_initial(b"new"),
             Err(VaultFileError::AlreadyExists)
         );
+        assert_eq!(files.read_main(), Ok(b"old".to_vec()));
+    }
+
+    #[test]
+    fn existing_main_can_be_atomically_replaced() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let files = WindowsVaultFiles::new(directory.path());
+        files.publish_initial(b"old").expect("第一次发布应成功");
+
+        files.replace_main(b"new").expect("已有主库应能替换");
+
+        assert_eq!(files.read_main(), Ok(b"new".to_vec()));
+    }
+
+    #[test]
+    fn replacement_requires_existing_main_and_valid_candidate() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let files = WindowsVaultFiles::new(directory.path());
+        assert_eq!(files.replace_main(b"new"), Err(VaultFileError::NotFound));
+
+        files.publish_initial(b"old").expect("第一次发布应成功");
+        assert_eq!(files.replace_main(&[]), Err(VaultFileError::EmptyCandidate));
         assert_eq!(files.read_main(), Ok(b"old".to_vec()));
     }
 
