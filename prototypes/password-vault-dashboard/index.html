@@ -289,13 +289,24 @@
     }
 
     .topbar {
+      position: relative;
       display: flex;
       min-height: 58px;
       align-items: center;
       justify-content: space-between;
       gap: 20px;
-      border-bottom: 1px solid var(--line);
       padding: 0 25px;
+    }
+
+    .topbar::after {
+      position: absolute;
+      right: 25px;
+      bottom: 0;
+      left: 25px;
+      height: 1px;
+      background: var(--line);
+      content: "";
+      pointer-events: none;
     }
 
     .topbar h1 {
