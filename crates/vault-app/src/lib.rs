@@ -3,7 +3,9 @@
 use std::sync::Mutex;
 
 use uuid::Uuid;
-use vault_core::{AccountError, CategoryError, CreateAccount, VaultDocument};
+use vault_core::{
+    AccountError, CategoryError, CreateAccount, UpdateAccount, UpdateAccountError, VaultDocument,
+};
 use vault_storage::{OpenedVault, VaultOpenError};
 
 /// 分类在前端可见的安全摘要，不包含任何账号字段或密码。
@@ -28,6 +30,28 @@ pub struct AccountSummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateAccountInput {
     pub category_id: Option<String>,
+    pub username: String,
+    pub password: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// 单条账号编辑详情；只由按 ID 的专用读取用例返回，不进入全量列表快照。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountEditDetail {
+    pub id: String,
+    pub category_id: Option<String>,
+    pub username: String,
+    pub password: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// 字段更新输入不包含账号 ID 和分类，避免编辑接口改变记录身份或归属。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateAccountInput {
     pub username: String,
     pub password: String,
     pub address: Option<String>,
@@ -62,6 +86,7 @@ pub enum VaultApplicationError {
     CategoryNameDuplicate,
     AccountUsernameRequired,
     AccountPasswordRequired,
+    AccountNotFound,
     VaultSaveFailed,
     StateUnavailable,
 }
@@ -97,7 +122,7 @@ impl VaultApplication {
         }
     }
 
-    /// 生成不包含路径、密钥和账号字段的当前确认快照。
+    /// 生成不包含路径、密钥、密码和备注的当前确认快照。
     pub fn snapshot(&self) -> Result<VaultSnapshot, VaultApplicationError> {
         let state = self
             .state
@@ -222,6 +247,67 @@ impl VaultApplication {
         state.document = confirmed;
         Ok(snapshot_from(&state))
     }
+
+    /// 按稳定 ID 读取一条编辑详情；不存在批量返回明文密码的接口。
+    pub fn account_for_edit(&self, id: &str) -> Result<AccountEditDetail, VaultApplicationError> {
+        let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let account = state
+            .document
+            .accounts
+            .iter()
+            .find(|account| account.id == account_id)
+            .ok_or(VaultApplicationError::AccountNotFound)?;
+        Ok(AccountEditDetail {
+            id: account.id.to_string(),
+            category_id: account.category_id.map(|id| id.to_string()),
+            username: account.username.clone(),
+            password: account.password.clone(),
+            address: account.address.clone(),
+            email: account.email.clone(),
+            notes: account.notes.clone(),
+        })
+    }
+
+    /// 按稳定 ID 提交字段编辑；只有磁盘确认成功后才替换应用快照。
+    pub fn update_account(
+        &self,
+        id: &str,
+        input: UpdateAccountInput,
+    ) -> Result<VaultSnapshot, VaultApplicationError> {
+        let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let mut candidate = state.document.clone();
+        candidate
+            .update_account(
+                account_id,
+                UpdateAccount {
+                    username: input.username,
+                    password: input.password,
+                    address: input.address,
+                    email: input.email,
+                    notes: input.notes,
+                },
+            )
+            .map_err(map_update_account_error)?;
+        candidate.revision = candidate
+            .revision
+            .checked_add(1)
+            .ok_or(VaultApplicationError::VaultSaveFailed)?;
+
+        let confirmed = self
+            .repository
+            .save_confirmed(&candidate)
+            .map_err(|_| VaultApplicationError::VaultSaveFailed)?;
+        state.document = confirmed;
+        Ok(snapshot_from(&state))
+    }
 }
 
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
@@ -238,6 +324,14 @@ fn map_account_error(error: AccountError) -> VaultApplicationError {
         AccountError::UsernameRequired => VaultApplicationError::AccountUsernameRequired,
         AccountError::PasswordRequired => VaultApplicationError::AccountPasswordRequired,
         AccountError::CategoryNotFound => VaultApplicationError::CategoryNotFound,
+    }
+}
+
+fn map_update_account_error(error: UpdateAccountError) -> VaultApplicationError {
+    match error {
+        UpdateAccountError::NotFound => VaultApplicationError::AccountNotFound,
+        UpdateAccountError::UsernameRequired => VaultApplicationError::AccountUsernameRequired,
+        UpdateAccountError::PasswordRequired => VaultApplicationError::AccountPasswordRequired,
     }
 }
 
@@ -571,5 +665,101 @@ mod tests {
         );
         assert_eq!(application.snapshot().expect("快照应可读取"), before);
         assert_eq!(save_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn account_for_edit_returns_only_requested_full_record() {
+        let mut document = VaultDocument::empty();
+        let first = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "目标账号".to_owned(),
+                password: "目标密码".to_owned(),
+                address: Some("https://target.invalid".to_owned()),
+                email: Some("target@example.invalid".to_owned()),
+                notes: Some("目标备注".to_owned()),
+            })
+            .expect("目标账号应创建成功");
+        document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "其他账号".to_owned(),
+                password: "其他密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("其他账号应创建成功");
+        let (application, _, _) = application_with_document(false, document);
+
+        let detail = application
+            .account_for_edit(&first.id.to_string())
+            .expect("目标详情应可读取");
+
+        assert_eq!(detail.id, first.id.to_string());
+        assert_eq!(detail.username, "目标账号");
+        assert_eq!(detail.password, "目标密码");
+        assert_eq!(detail.notes.as_deref(), Some("目标备注"));
+        assert_eq!(
+            application.account_for_edit("invalid-id"),
+            Err(VaultApplicationError::AccountNotFound)
+        );
+    }
+
+    #[test]
+    fn update_account_publishes_once_and_failure_keeps_confirmed_snapshot() {
+        let mut document = VaultDocument::empty();
+        let target = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "旧账号".to_owned(),
+                password: "旧密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("目标账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document.clone());
+        let updated = application
+            .update_account(
+                &target.id.to_string(),
+                UpdateAccountInput {
+                    username: "新账号".to_owned(),
+                    password: "新密码".to_owned(),
+                    address: Some("https://new.invalid".to_owned()),
+                    email: None,
+                    notes: Some("新备注".to_owned()),
+                },
+            )
+            .expect("账号编辑应保存成功");
+
+        assert_eq!(updated.revision, 1);
+        assert_eq!(updated.accounts[0].username, "新账号");
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            application
+                .account_for_edit(&target.id.to_string())
+                .expect("新详情应可读取")
+                .password,
+            "新密码"
+        );
+
+        let (failing, _, failing_count) = application_with_document(true, document);
+        let before = failing.snapshot().expect("旧快照应可读取");
+        assert_eq!(
+            failing.update_account(
+                &target.id.to_string(),
+                UpdateAccountInput {
+                    username: "不会保存".to_owned(),
+                    password: "不会保存".to_owned(),
+                    address: None,
+                    email: None,
+                    notes: None,
+                },
+            ),
+            Err(VaultApplicationError::VaultSaveFailed)
+        );
+        assert_eq!(failing.snapshot().expect("快照应可读取"), before);
+        assert_eq!(failing_count.load(Ordering::SeqCst), 1);
     }
 }

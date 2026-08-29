@@ -25,6 +25,19 @@ export type CreateAccountInput = {
   notes: string | null;
 };
 
+/** 单条账号编辑详情；仅在打开该账号编辑弹框时请求。 */
+export type AccountEditDetail = {
+  id: string;
+  categoryId: string | null;
+  username: string;
+  password: string;
+  address: string | null;
+  email: string | null;
+  notes: string | null;
+};
+
+export type UpdateAccountInput = Omit<CreateAccountInput, "categoryId">;
+
 export type VaultStatus = {
   schemaVersion: number;
   revision: number;
@@ -64,4 +77,14 @@ export function deleteCategory(id: string): Promise<VaultStatus> {
 /** 明文密码只作为本次 command 请求参数发送，响应中的账号列表不含密码。 */
 export function createAccount(input: CreateAccountInput): Promise<VaultStatus> {
   return invoke<VaultStatus>("create_account", { input });
+}
+
+/** 每次必须指定一个账号 ID，Rust 只返回该条记录的编辑字段。 */
+export function loadAccountForEdit(id: string): Promise<AccountEditDetail> {
+  return invoke<AccountEditDetail>("load_account_for_edit", { id });
+}
+
+/** 字段编辑不能通过该请求改变账号 ID 或分类归属。 */
+export function updateAccount(id: string, input: UpdateAccountInput): Promise<VaultStatus> {
+  return invoke<VaultStatus>("update_account", { id, input });
 }

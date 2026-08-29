@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use vault_app::{
-    AccountSummary, CategorySummary, CreateAccountInput, VaultApplication, VaultApplicationError,
-    VaultSnapshot,
+    AccountEditDetail, AccountSummary, CategorySummary, CreateAccountInput, UpdateAccountInput,
+    VaultApplication, VaultApplicationError, VaultSnapshot,
 };
 
 /// 分类安全摘要；账号数由 Rust 当前确认文档计算。
@@ -30,6 +30,30 @@ pub(crate) struct AccountDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CreateAccountDto {
     category_id: Option<String>,
+    username: String,
+    password: String,
+    address: Option<String>,
+    email: Option<String>,
+    notes: Option<String>,
+}
+
+/// 单条编辑详情 DTO 只通过按 ID 的专用 command 返回。
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AccountEditDto {
+    id: String,
+    category_id: Option<String>,
+    username: String,
+    password: String,
+    address: Option<String>,
+    email: Option<String>,
+    notes: Option<String>,
+}
+
+/// 编辑请求不包含账号 ID 和分类，定位 ID 作为独立 command 参数传入。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UpdateAccountDto {
     username: String,
     password: String,
     address: Option<String>,
@@ -86,6 +110,20 @@ impl From<AccountSummary> for AccountDto {
     }
 }
 
+impl From<AccountEditDetail> for AccountEditDto {
+    fn from(account: AccountEditDetail) -> Self {
+        Self {
+            id: account.id,
+            category_id: account.category_id,
+            username: account.username,
+            password: account.password,
+            address: account.address,
+            email: account.email,
+            notes: account.notes,
+        }
+    }
+}
+
 impl From<CategorySummary> for CategoryDto {
     fn from(category: CategorySummary) -> Self {
         Self {
@@ -129,6 +167,10 @@ impl From<VaultApplicationError> for CommandErrorDto {
             VaultApplicationError::AccountPasswordRequired => Self {
                 code: "ACCOUNT_PASSWORD_REQUIRED",
                 message: "密码不能为空",
+            },
+            VaultApplicationError::AccountNotFound => Self {
+                code: "ACCOUNT_NOT_FOUND",
+                message: "账号不存在，请重新加载",
             },
             VaultApplicationError::VaultSaveFailed => Self {
                 code: "VAULT_SAVE_FAILED",
@@ -204,6 +246,38 @@ pub(crate) fn create_account(
         .map_err(CommandErrorDto::from)
 }
 
+#[tauri::command]
+pub(crate) fn load_account_for_edit(
+    id: String,
+    application: State<'_, VaultApplication>,
+) -> Result<AccountEditDto, CommandErrorDto> {
+    application
+        .account_for_edit(&id)
+        .map(AccountEditDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
+#[tauri::command]
+pub(crate) fn update_account(
+    id: String,
+    input: UpdateAccountDto,
+    application: State<'_, VaultApplication>,
+) -> Result<VaultStatusDto, CommandErrorDto> {
+    application
+        .update_account(
+            &id,
+            UpdateAccountInput {
+                username: input.username,
+                password: input.password,
+                address: input.address,
+                email: input.email,
+                notes: input.notes,
+            },
+        )
+        .map(VaultStatusDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,5 +334,26 @@ mod tests {
             CommandErrorDto::from(VaultApplicationError::AccountPasswordRequired).code,
             "ACCOUNT_PASSWORD_REQUIRED"
         );
+        assert_eq!(
+            CommandErrorDto::from(VaultApplicationError::AccountNotFound).code,
+            "ACCOUNT_NOT_FOUND"
+        );
+    }
+
+    #[test]
+    fn edit_detail_dto_maps_only_one_requested_record() {
+        let dto = AccountEditDto::from(AccountEditDetail {
+            id: "account-id".to_owned(),
+            category_id: None,
+            username: "账号".to_owned(),
+            password: "密码".to_owned(),
+            address: None,
+            email: None,
+            notes: Some("备注".to_owned()),
+        });
+
+        assert_eq!(dto.id, "account-id");
+        assert_eq!(dto.password, "密码");
+        assert_eq!(dto.notes.as_deref(), Some("备注"));
     }
 }
