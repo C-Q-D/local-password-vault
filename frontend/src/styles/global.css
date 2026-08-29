@@ -200,6 +200,7 @@ svg {
 }
 
 .category-context-menu button:hover { background: #f2f2f0; }
+.category-context-menu button.danger { color: #a44747; }
 
 .vault-status {
   display: grid;
@@ -660,6 +661,40 @@ th:last-child { width: 70px; }
   gap: 8px;
   border-top: 1px solid var(--line);
   padding: 12px 18px;
+}
+
+.dialog-copy {
+  color: #555551;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.danger-button {
+  height: 34px;
+  border: 1px solid #a44747;
+  border-radius: 8px;
+  background: #a44747;
+  padding: 0 12px;
+  color: #fff;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.danger-button:disabled { cursor: not-allowed; opacity: 0.58; }
+
+.toast {
+  position: fixed;
+  z-index: 30;
+  right: 22px;
+  bottom: 22px;
+  max-width: 360px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #252524;
+  padding: 11px 14px;
+  color: #fff;
+  font-size: 10.5px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 }
 
 @media (max-width: 1180px) {

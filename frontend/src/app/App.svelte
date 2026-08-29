@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import {
     createCategory,
+    deleteCategory,
     loadVault,
     renameCategory,
     type CategorySummary,
@@ -16,6 +17,11 @@
   let categoryDialogMode: "create" | "rename" = "create";
   let editingCategoryId: string | null = null;
   let categoryMenu: { category: CategorySummary; x: number; y: number } | null = null;
+  let pendingDeleteCategory: CategorySummary | null = null;
+  let deleteSubmitting = false;
+  let deleteError = "";
+  let notice = "";
+  let noticeTimer: number | undefined;
   let categoryName = "";
   let categoryError = "";
   let categorySubmitting = false;
@@ -72,6 +78,28 @@
     };
   }
 
+  function showNotice(message: string) {
+    notice = message;
+    if (noticeTimer) window.clearTimeout(noticeTimer);
+    noticeTimer = window.setTimeout(() => (notice = ""), 2600);
+  }
+
+  function requestDeleteCategory(category: CategorySummary) {
+    categoryMenu = null;
+    if (category.accountCount > 0) {
+      showNotice(`分类“${category.name}”中还有 ${category.accountCount} 个账号，不能删除`);
+      return;
+    }
+    deleteError = "";
+    pendingDeleteCategory = category;
+  }
+
+  function cancelDeleteCategory() {
+    if (deleteSubmitting) return;
+    pendingDeleteCategory = null;
+    deleteError = "";
+  }
+
   /** 关闭和取消只清理表单，不触发必填校验或后端写入。 */
   function closeCategoryDialog() {
     if (categorySubmitting) return;
@@ -86,6 +114,7 @@
     if (commandError?.code === "CATEGORY_NAME_EMPTY") return "请输入分类名称";
     if (commandError?.code === "CATEGORY_NAME_DUPLICATE") return "该分类名称已经存在";
     if (commandError?.code === "CATEGORY_NOT_FOUND") return "分类不存在，请重新加载";
+    if (commandError?.code === "CATEGORY_NOT_EMPTY") return "分类中仍有账号，请先处理分类内账号";
     if (commandError?.message) return commandError.message;
     return "分类保存失败，请重试";
   }
@@ -114,9 +143,32 @@
     }
   }
 
+  async function confirmDeleteCategory() {
+    if (!pendingDeleteCategory || deleteSubmitting) return;
+    deleteSubmitting = true;
+    deleteError = "";
+    try {
+      const deletedName = pendingDeleteCategory.name;
+      vault = await deleteCategory(pendingDeleteCategory.id);
+      pendingDeleteCategory = null;
+      showNotice(`分类“${deletedName}”已删除`);
+    } catch (error) {
+      const message = commandMessage(error);
+      if ((error as Partial<CommandError> | null)?.code === "CATEGORY_NOT_EMPTY") {
+        pendingDeleteCategory = null;
+        showNotice(message);
+      } else {
+        deleteError = message;
+      }
+    } finally {
+      deleteSubmitting = false;
+    }
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
     categoryMenu = null;
+    if (pendingDeleteCategory) cancelDeleteCategory();
     if (categoryDialogOpen) closeCategoryDialog();
   }
 
@@ -302,7 +354,34 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10-10-3.2-3.2-10 10Z" /><path d="m13.8 7 3.2 3.2" /></svg>
       重命名
     </button>
+    <button class="danger" type="button" role="menuitem" onclick={() => requestDeleteCategory(categoryMenu!.category)}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
+      删除
+    </button>
   </div>
+{/if}
+
+{#if pendingDeleteCategory}
+  <div class="dialog-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && cancelDeleteCategory()}>
+    <div class="compact-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-category-title" aria-describedby="delete-category-copy">
+      <header class="dialog-head">
+        <h2 id="delete-category-title">删除分类</h2>
+        <button class="dialog-close" type="button" onclick={cancelDeleteCategory} disabled={deleteSubmitting} aria-label="关闭">×</button>
+      </header>
+      <div class="dialog-body">
+        <p class="dialog-copy" id="delete-category-copy">确定删除分类“<strong>{pendingDeleteCategory.name}</strong>”吗？删除后无法撤销。</p>
+        {#if deleteError}<p class="field-error" role="alert">{deleteError}</p>{/if}
+      </div>
+      <footer class="dialog-foot">
+        <button class="secondary-button" type="button" onclick={cancelDeleteCategory} disabled={deleteSubmitting}>取消</button>
+        <button class="danger-button" type="button" onclick={confirmDeleteCategory} disabled={deleteSubmitting}>{deleteSubmitting ? "删除中" : "确认删除"}</button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
+{#if notice}
+  <div class="toast" role="status">{notice}</div>
 {/if}
 
 {#if categoryDialogOpen}
