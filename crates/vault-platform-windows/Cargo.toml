@@ -20,3 +20,4 @@ zeroize = "1.9.0"
 
 [dev-dependencies]
 getrandom = "0.4.3"
+tempfile = "3.27.0"

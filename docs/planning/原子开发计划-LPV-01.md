@@ -36,8 +36,8 @@
 | 1 | LPV-01-01 定义空密码库文档 | 无 | L1 | done |
 | 2 | LPV-01-02 加密和认证空密码库信封 | LPV-01-01 | L3 | done |
 | 3 | LPV-01-03 使用 DPAPI 保护数据密钥 | LPV-01-02 | L3 | done |
-| 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | in_progress |
-| 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | pending |
+| 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | done |
+| 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | in_progress |
 | 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | pending |
 | 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | pending |
 | 8 | LPV-01-08 按参考图实现整体主界面 | LPV-01-07、项目所有者参考图 | L1 | pending |
@@ -113,7 +113,7 @@
 
 ## LPV-01-04 首次原子发布和读取主库
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：首次保存不会覆盖已有主库，失败不会产生半写 main。
 - 唯一目标：Windows 文件实现能在指定隔离目录把完整候选字节首次发布为 `vault.dat`，并重新读取相同字节。
 - 当前行为与目标行为：当前 `atomic_file.rs` 只有模块说明；完成后实现 `vault-storage` 定义的首次文件接口。
@@ -136,7 +136,7 @@
 
 ## LPV-01-05 初始化或加载空密码库
 
-- 状态：pending
+- 状态：in_progress
 - 支持的验收场景：首次启动创建空库，第二次启动解密加载同一空库。
 - 唯一目标：`vault-storage` 用一个存储入口在 main 不存在时初始化空库，在 main 存在时认证加载。
 - 当前行为与目标行为：信封与平台接口彼此独立；完成后形成 `open_or_initialize` 用例。
@@ -266,3 +266,11 @@
 - DDD 记录：首次反证阻断了不存在的 `SecureZeroMemory` 绑定并改为可验证 `zeroize`；实现复核阻断了无清理栈数组副本，改为从借用数组直接复制进 `DataKey`；最终结论为 PASS。
 - 验证证据：真实当前 Windows 用户 DPAPI 4 项测试通过；`vault-storage` 5 项回归通过；目标 crate check、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
 - 范围确认：未修改文件发布、Tauri 或前端；工作区并行出现的 `prototypes/` 未读取业务内容、未修改、未纳入本原子。
+
+### LPV-01-04
+
+- 完成结果：定义最小 `VaultFiles` 接口，并实现同目录唯一 temp、完整写入、`sync_all`、无覆盖 `MoveFileExW` 首次发布和 64 MiB + 1 有界句柄读取。
+- 写入证据：发布前后都检查 main；目标已存在返回 `AlreadyExists`；失败由 RAII 关闭并清理本次 `create_new` temp；空候选和超大候选在创建 main 前拒绝。
+- DDD 记录：反证提出同用户恶意进程抢换 temp，按产品轻量边界判定越出范围并写明威胁边界；其无界读取反例被吸收为句柄限量读取。按修订范围复核最终为 PASS。
+- 验证证据：Windows 平台 crate 8 项测试、storage 5 项回归、目标 check、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
+- 范围确认：仅使用 `tempfile` 隔离目录；未实现后续替换、backup、正式用户目录、Tauri 或前端。

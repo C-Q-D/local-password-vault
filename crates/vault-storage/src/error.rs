@@ -61,3 +61,18 @@ pub enum EnvelopeError {
     #[error("密码库内容无法解析")]
     InvalidPayload,
 }
+
+/// 主密码库文件边界返回的稳定错误类别。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum VaultFileError {
+    #[error("主密码库已经存在")]
+    AlreadyExists,
+    #[error("主密码库不存在")]
+    NotFound,
+    #[error("待保存内容不能为空")]
+    EmptyCandidate,
+    #[error("密码库文件超过大小限制")]
+    TooLarge,
+    #[error("密码库文件操作失败")]
+    Io,
+}

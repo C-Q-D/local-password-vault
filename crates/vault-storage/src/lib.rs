@@ -2,8 +2,10 @@
 
 mod envelope;
 mod error;
+mod file_access;
 mod key_protection;
 
 pub use envelope::{MAX_ENVELOPE_SIZE, open, seal};
-pub use error::{EnvelopeError, KeyProtectionError};
+pub use error::{EnvelopeError, KeyProtectionError, VaultFileError};
+pub use file_access::VaultFiles;
 pub use key_protection::{DataKey, KeyProtector};
