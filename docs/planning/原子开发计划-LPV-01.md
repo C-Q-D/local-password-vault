@@ -33,8 +33,8 @@
 
 | 顺序 | 原子 | 依赖 | 风险 | 状态 |
 |---|---|---|---|---|
-| 1 | LPV-01-01 定义空密码库文档 | 无 | L1 | in_progress |
-| 2 | LPV-01-02 加密和认证空密码库信封 | LPV-01-01 | L3 | pending |
+| 1 | LPV-01-01 定义空密码库文档 | 无 | L1 | done |
+| 2 | LPV-01-02 加密和认证空密码库信封 | LPV-01-01 | L3 | in_progress |
 | 3 | LPV-01-03 使用 DPAPI 保护数据密钥 | LPV-01-02 | L3 | pending |
 | 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | pending |
 | 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | pending |
@@ -44,7 +44,7 @@
 
 ## LPV-01-01 定义空密码库文档
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：首次启动得到结构有效的空密码库。
 - 唯一目标：`vault-core` 能构造、序列化、反序列化并校验 schema version 为 1、revision 为 0、分类和账号均为空的文档。
 - 当前行为与目标行为：当前 crate 为空；完成后存在稳定的 `VaultDocument`、`Category` 和 `Account` 数据结构以及文档校验错误。
@@ -67,7 +67,7 @@
 
 ## LPV-01-02 加密和认证空密码库信封
 
-- 状态：pending
+- 状态：in_progress
 - 支持的验收场景：磁盘候选数据不包含明文 JSON，篡改后无法加载。
 - 唯一目标：`vault-storage` 能把经过校验的 `VaultDocument` 编码为版本化 AES-256-GCM 信封，并从信封认证解码。
 - 当前行为与目标行为：当前 crate 为空；完成后提供内存中的 `seal` 和 `open`，但不调用 DPAPI 或文件系统。
@@ -237,3 +237,12 @@
 | 修订版本 | 变化 | 原因 |
 |---|---|---|
 | 1 | 初始计划 | 首次拆分 LPV-01，并按用户要求在整体前端前设置停止点 |
+
+## 执行记录
+
+### LPV-01-01
+
+- 完成结果：定义 `VaultDocument`、`Category`、`Account` 和稳定校验错误；空库固定为 schema version 1、revision 0。
+- 不变量证据：统一校验结构版本、ID 唯一性、分类名称、账号必填字段和分类引用；错误不携带用户字段内容。
+- 验证证据：`cargo test -p vault-core`（7 项通过）、`cargo check -p vault-core`、`cargo fmt --all -- --check` 和 `git diff --check` 均通过。
+- 范围确认：未修改加密、平台文件、Tauri command 或前端。
