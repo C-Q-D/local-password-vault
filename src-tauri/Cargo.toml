@@ -1,0 +1,20 @@
+[package]
+name = "local-password-vault"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "local_password_vault_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "=2.11.5", features = [] }
+vault-app = { path = "../crates/vault-app" }
+
+[target.'cfg(windows)'.dependencies]
+vault-platform-windows = { path = "../crates/vault-platform-windows" }

@@ -1,0 +1,25 @@
+[workspace]
+members = [
+  "crates/vault-app",
+  "crates/vault-core",
+  "crates/vault-platform-windows",
+  "crates/vault-storage",
+  "src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.96.1"
+
+[profile.dev]
+incremental = true
+opt-level = 0
+debug = 1
+codegen-units = 256
+lto = false
+
+[profile.test]
+incremental = true
+opt-level = 0
+debug = 1
