@@ -4,7 +4,7 @@
 
 - 计划 ID：ATOMIC-LPV-01-001
 - 类型：atomic-development
-- 修订版本：1
+- 修订版本：2
 - 状态：active
 - 父级 ID：LPV-01
 - 创建基线：9a19d6e67c21afe49a8fcfdd10a829468877cd7b
@@ -75,8 +75,8 @@
 - 代码定位依据：`crates/vault-storage/src/lib.rs`；依赖 `vault-core`。
 - 允许修改：`vault-storage` manifest、信封源码、错误类型和单元测试；本原子状态记录。
 - 明确不修改：Windows DPAPI、文件发布、应用状态、Tauri 和前端。
-- 实现步骤：定义有界二进制信封；使用随机 32 字节数据密钥和 12 字节 nonce；采用 AES-256-GCM detached tag；认证后才反序列化和校验文档；敏感密钥使用 `zeroize`。
-- 接口、数据与错误契约：magic、format version、长度、wrapped key、nonce、tag 和 ciphertext 均有明确上限；对外只返回稳定错误类别，不包含明文或密钥。
+- 实现步骤：定义有界二进制信封；使用随机 32 字节数据密钥和 12 字节 nonce；采用 AES-256-GCM detached tag；将从 magic 起至 wrapped key 末尾的原始规范头字节作为 AAD；认证后才反序列化和校验文档；敏感密钥使用 `zeroize`。
+- 接口、数据与错误契约：magic、format version、header length、wrapped key length、ciphertext length、wrapped key、nonce、tag 和 ciphertext 均有明确上限；seal/open 必须使用完全相同的原始头字节作为 AAD，任何影响解析或密码学语义的新增持久化元数据也必须纳入 AAD；对外只返回稳定错误类别，不包含明文或密钥。
 - 边界与异常：文件总大小上限 64 MiB；nonce 每次封装重新生成；错误长度、版本或认证失败均拒绝。
 - 测试要求：空库往返；相同文档两次封装不同；ciphertext、nonce、tag 和长度篡改被拒绝；信封中不出现明文 JSON 字段。
 - 验证命令：`cargo test -p vault-storage`；`cargo check -p vault-storage`；格式检查。
@@ -237,6 +237,7 @@
 | 修订版本 | 变化 | 原因 |
 |---|---|---|
 | 1 | 初始计划 | 首次拆分 LPV-01，并按用户要求在整体前端前设置停止点 |
+| 2 | 明确加密信封 AAD 边界 | DDD 反证指出仅靠结构校验不能证明头部元数据与密文绑定 |
 
 ## 执行记录
 
