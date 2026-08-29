@@ -3,6 +3,8 @@
   import {
     createCategory,
     loadVault,
+    renameCategory,
+    type CategorySummary,
     type CommandError,
     type VaultStatus,
   } from "../lib/tauri/commands";
@@ -11,6 +13,9 @@
   let vault: VaultStatus | null = null;
   let errorMessage = "";
   let categoryDialogOpen = false;
+  let categoryDialogMode: "create" | "rename" = "create";
+  let editingCategoryId: string | null = null;
+  let categoryMenu: { category: CategorySummary; x: number; y: number } | null = null;
   let categoryName = "";
   let categoryError = "";
   let categorySubmitting = false;
@@ -37,16 +42,41 @@
 
   /** 每次打开新建弹框都从空表单开始。 */
   function openCategoryDialog() {
+    categoryDialogMode = "create";
+    editingCategoryId = null;
     categoryName = "";
     categoryError = "";
     categoryDialogOpen = true;
     requestAnimationFrame(() => categoryInput?.focus());
   }
 
+  function openRenameDialog(category: CategorySummary) {
+    categoryDialogMode = "rename";
+    editingCategoryId = category.id;
+    categoryName = category.name;
+    categoryError = "";
+    categoryDialogOpen = true;
+    categoryMenu = null;
+    requestAnimationFrame(() => {
+      categoryInput?.focus();
+      categoryInput?.select();
+    });
+  }
+
+  function openCategoryMenu(event: MouseEvent, category: CategorySummary) {
+    event.preventDefault();
+    categoryMenu = {
+      category,
+      x: Math.min(event.clientX, window.innerWidth - 150),
+      y: Math.min(event.clientY, window.innerHeight - 96),
+    };
+  }
+
   /** 关闭和取消只清理表单，不触发必填校验或后端写入。 */
   function closeCategoryDialog() {
     if (categorySubmitting) return;
     categoryDialogOpen = false;
+    editingCategoryId = null;
     categoryName = "";
     categoryError = "";
   }
@@ -55,6 +85,7 @@
     const commandError = error as Partial<CommandError> | null;
     if (commandError?.code === "CATEGORY_NAME_EMPTY") return "请输入分类名称";
     if (commandError?.code === "CATEGORY_NAME_DUPLICATE") return "该分类名称已经存在";
+    if (commandError?.code === "CATEGORY_NOT_FOUND") return "分类不存在，请重新加载";
     if (commandError?.message) return commandError.message;
     return "分类保存失败，请重试";
   }
@@ -70,8 +101,11 @@
     categorySubmitting = true;
     categoryError = "";
     try {
-      vault = await createCategory(categoryName);
+      vault = categoryDialogMode === "rename" && editingCategoryId
+        ? await renameCategory(editingCategoryId, categoryName)
+        : await createCategory(categoryName);
       categoryDialogOpen = false;
+      editingCategoryId = null;
       categoryName = "";
     } catch (error) {
       categoryError = commandMessage(error);
@@ -81,11 +115,17 @@
   }
 
   function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && categoryDialogOpen) closeCategoryDialog();
+    if (event.key !== "Escape") return;
+    categoryMenu = null;
+    if (categoryDialogOpen) closeCategoryDialog();
+  }
+
+  function handleWindowClick() {
+    categoryMenu = null;
   }
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
 <svelte:head>
   <title>Local Vault · 账号管理</title>
@@ -116,7 +156,7 @@
     </div>
     <div class="category-list">
       {#each vault?.categories ?? [] as category (category.id)}
-        <button class="category-item" type="button" title={category.name}>
+        <button class="category-item" type="button" title={category.name} oncontextmenu={(event) => openCategoryMenu(event, category)}>
           <span class="category-dot"></span>
           <span class="category-name">{category.name}</span>
           <span class="count">{category.accountCount}</span>
@@ -256,12 +296,21 @@
   </main>
 </div>
 
+{#if categoryMenu}
+  <div class="category-context-menu" style={`left:${categoryMenu.x}px;top:${categoryMenu.y}px`} role="menu" tabindex="-1">
+    <button type="button" role="menuitem" onclick={() => openRenameDialog(categoryMenu!.category)}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10-10-3.2-3.2-10 10Z" /><path d="m13.8 7 3.2 3.2" /></svg>
+      重命名
+    </button>
+  </div>
+{/if}
+
 {#if categoryDialogOpen}
   <div class="dialog-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && closeCategoryDialog()}>
     <div class="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="category-dialog-title">
       <form onsubmit={submitCategory} novalidate>
         <header class="dialog-head">
-          <h2 id="category-dialog-title">新建分类</h2>
+          <h2 id="category-dialog-title">{categoryDialogMode === "create" ? "新建分类" : "重命名分类"}</h2>
           <button class="dialog-close" type="button" onclick={closeCategoryDialog} disabled={categorySubmitting} aria-label="关闭">×</button>
         </header>
         <div class="dialog-body">
@@ -281,7 +330,7 @@
         </div>
         <footer class="dialog-foot">
           <button class="secondary-button" type="button" onclick={closeCategoryDialog} disabled={categorySubmitting}>取消</button>
-          <button class="primary-button" type="submit" disabled={categorySubmitting}>{categorySubmitting ? "保存中" : "创建分类"}</button>
+          <button class="primary-button" type="submit" disabled={categorySubmitting}>{categorySubmitting ? "保存中" : categoryDialogMode === "create" ? "创建分类" : "保存修改"}</button>
         </footer>
       </form>
     </div>

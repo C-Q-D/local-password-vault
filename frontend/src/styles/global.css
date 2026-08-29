@@ -173,6 +173,34 @@ svg {
   text-align: center;
 }
 
+.category-context-menu {
+  position: fixed;
+  z-index: 18;
+  width: 138px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  padding: 5px;
+  box-shadow: 0 9px 24px rgb(0 0 0 / 10%);
+}
+
+.category-context-menu button {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0 8px;
+  color: #555551;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.category-context-menu button:hover { background: #f2f2f0; }
+
 .vault-status {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr);
