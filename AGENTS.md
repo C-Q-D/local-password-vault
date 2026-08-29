@@ -1,5 +1,14 @@
 # Local Password Vault Agent 规则
 
+<!-- codex-plan-index:start -->
+## 当前计划索引
+
+| 计划 ID | 类型 | 文档 |
+|---|---|---|
+| SCOPE-LPV-MVP-001 | 产品拆分 | [本地密码库 MVP 开发计划](docs/planning/开发计划.md) |
+
+<!-- codex-plan-index:end -->
+
 本文件补充用户级全局规则，只规定当前仓库的项目约束。若与更高优先级指令冲突，以更高优先级指令为准。
 
 ## 当前技术栈
