@@ -219,58 +219,6 @@
       line-height: 1.35;
     }
 
-    .sidebar-divider {
-      height: 1px;
-      margin: 2px 0;
-      background: var(--line);
-    }
-
-    .profile {
-      display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) 16px;
-      gap: 9px;
-      align-items: center;
-      padding: 8px 9px;
-      border-radius: 9px;
-      cursor: default;
-    }
-
-    .profile:hover {
-      background: #f3f3f1;
-    }
-
-    .avatar {
-      display: grid;
-      width: 30px;
-      height: 30px;
-      place-items: center;
-      border: 1px solid #dededb;
-      border-radius: 8px;
-      background: var(--surface);
-      color: #474747;
-      font-size: 11px;
-      font-weight: 650;
-    }
-
-    .profile strong,
-    .profile span {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .profile strong {
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .profile span {
-      margin-top: 2px;
-      color: var(--text-muted);
-      font-size: 9px;
-    }
-
     .main-wrap {
       min-width: 0;
       height: 100%;
@@ -928,7 +876,6 @@
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l8-8m-3 3 2 2m-5 1 2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19 13.5v-3l-2-.7a7 7 0 0 0-.8-1.8l.9-1.9-2.2-2.2-1.9.9a7 7 0 0 0-1.8-.8L10.5 2h-3l-.7 2a7 7 0 0 0-1.8.8l-1.9-.9L.9 6.1 1.8 8a7 7 0 0 0-.8 1.8l-2 .7v3l2 .7a7 7 0 0 0 .8 1.8l-.9 1.9 2.2 2.2 1.9-.9a7 7 0 0 0 1.8.8l.7 2h3l.7-2a7 7 0 0 0 1.8-.8l1.9.9 2.2-2.2-.9-1.9a7 7 0 0 0 .8-1.8z" transform="translate(3 0) scale(.75)" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -975,13 +922,6 @@
         <div class="vault-status">
           <div class="status-ring"><svg><use href="#i-lock"/></svg></div>
           <div><strong>密码库已锁定保护</strong><span>数据仅保存在这台电脑</span></div>
-        </div>
-        <div class="sidebar-divider"></div>
-        <button class="nav-item"><svg class="icon"><use href="#i-settings"/></svg>设置</button>
-        <div class="profile">
-          <div class="avatar">本机</div>
-          <div><strong>Administrator</strong><span>Windows 设备</span></div>
-          <svg class="icon"><use href="#i-chevron"/></svg>
         </div>
       </div>
     </aside>
