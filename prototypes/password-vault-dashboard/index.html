@@ -303,7 +303,7 @@
 
     .search-box {
       display: flex;
-      width: 238px;
+      width: 268px;
       height: 34px;
       align-items: center;
       gap: 8px;
@@ -322,6 +322,8 @@
 
     .search-box input {
       width: 100%;
+      min-width: 0;
+      flex: 1;
       border: 0;
       outline: 0;
       background: transparent;
@@ -331,6 +333,38 @@
 
     .search-box input::placeholder {
       color: #a3a3a0;
+    }
+
+    .search-box input::-webkit-search-cancel-button {
+      display: none;
+    }
+
+    .search-clear-button {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0;
+      color: #858582;
+      cursor: pointer;
+    }
+
+    .search-clear-button:hover {
+      background: #f1f1ef;
+      color: #3f3f3d;
+    }
+
+    .search-clear-button svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .search-clear-button[hidden] {
+      display: none;
     }
 
     .icon-button,
@@ -1127,10 +1161,11 @@
         <header class="topbar">
           <h1>账号管理</h1>
           <div class="topbar-actions">
-            <label class="search-box">
+            <div class="search-box" role="search">
               <svg><use href="#i-search"/></svg>
-              <input id="searchInput" type="search" placeholder="搜索名称、网址或用户名" autocomplete="off" />
-            </label>
+              <input id="searchInput" type="search" placeholder="搜索账号名、地址、邮箱或备注" aria-label="搜索账号名、地址、邮箱或备注" autocomplete="off" />
+              <button class="search-clear-button" id="clearSearchButton" type="button" title="清空搜索" aria-label="清空搜索" hidden><svg><use href="#i-close"/></svg></button>
+            </div>
             <button class="icon-button" id="refreshButton" title="刷新"><svg class="button-icon"><use href="#i-refresh"/></svg></button>
             <button class="primary-button" id="openCreateDialog"><svg class="button-icon"><use href="#i-plus"/></svg>新增账号</button>
           </div>
@@ -1208,29 +1243,29 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr data-account-name="GitHub" data-password="Gh-demo-2026!" data-address="https://github.com" data-email="chen.dev@example.com" data-notes="个人代码仓库与项目协作" data-category="开发" data-search="github github.com chen.dev@example.com 个人代码仓库与项目协作 开发">
+                  <tr data-account-name="GitHub" data-password="Gh-demo-2026!" data-address="https://github.com" data-email="chen.dev@example.com" data-notes="个人代码仓库与项目协作" data-category="开发">
                     <td><div class="account-cell"><span class="service-mark">GH</span><span class="account-name"><strong>GitHub</strong><small>github.com</small></span></div></td>
                     <td>chen.dev@example.com</td><td><span class="category-badge" data-category="开发">开发</span></td><td><span class="password-mask">••••••••••••</span></td><td>2 分钟前</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-account-name="Google Workspace" data-password="Google-demo-2026!" data-address="https://accounts.google.com" data-email="chen.company@example.com" data-notes="工作邮箱与文档" data-category="工作" data-search="google workspace accounts.google.com chen.company@example.com 工作邮箱与文档 工作">
+                  <tr data-account-name="Google Workspace" data-password="Google-demo-2026!" data-address="https://accounts.google.com" data-email="chen.company@example.com" data-notes="工作邮箱与文档" data-category="工作">
                     <td><div class="account-cell"><span class="service-mark">G</span><span class="account-name"><strong>Google Workspace</strong><small>accounts.google.com</small></span></div></td>
                     <td>chen.company@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>今天 18:42</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-account-name="Figma" data-password="Figma-demo-2026!" data-address="https://figma.com" data-email="designer@example.com" data-notes="产品原型与设计稿" data-category="工作" data-search="figma figma.com designer@example.com 产品原型与设计稿 工作">
+                  <tr data-account-name="Figma" data-password="Figma-demo-2026!" data-address="https://figma.com" data-email="designer@example.com" data-notes="产品原型与设计稿" data-category="工作">
                     <td><div class="account-cell"><span class="service-mark">F</span><span class="account-name"><strong>Figma</strong><small>figma.com</small></span></div></td>
                     <td>designer@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>昨天 22:16</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-account-name="Notion" data-password="Notion-demo-2026!" data-address="https://notion.so" data-email="personal@example.com" data-notes="个人知识库" data-category="个人" data-search="notion notion.so personal@example.com 个人知识库 个人">
+                  <tr data-account-name="Notion" data-password="Notion-demo-2026!" data-address="https://notion.so" data-email="personal@example.com" data-notes="个人知识库" data-category="个人">
                     <td><div class="account-cell"><span class="service-mark">N</span><span class="account-name"><strong>Notion</strong><small>notion.so</small></span></div></td>
                     <td>personal@example.com</td><td><span class="category-badge" data-category="个人">个人</span></td><td><span class="password-mask">••••••••••••</span></td><td>8 月 27 日</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
                 </tbody>
               </table>
-              <div class="empty-state" id="emptyState">没有找到匹配的账号</div>
+              <div class="empty-state" id="emptyState" role="status" aria-live="polite">没有找到匹配的账号</div>
             </div>
           </section>
         </div>
@@ -1329,6 +1364,7 @@
 
   <script>
     const searchInput = document.querySelector('#searchInput');
+    const clearSearchButton = document.querySelector('#clearSearchButton');
     let rows = [...document.querySelectorAll('#accountTable tbody tr')];
     const emptyState = document.querySelector('#emptyState');
     const table = document.querySelector('#accountTable');
@@ -1370,11 +1406,20 @@
     let pendingDeleteAccountRow = null;
 
     // 原型只做界面行为演示，不会读取或保存真实密码。
+    function getAccountSearchText(row) {
+      return [
+        row.dataset.accountName,
+        row.dataset.address,
+        row.dataset.email,
+        row.dataset.notes
+      ].join(' ').toLocaleLowerCase('zh-CN');
+    }
+
     function applyFilter() {
-      const query = searchInput.value.trim().toLowerCase();
+      const query = searchInput.value.trim().toLocaleLowerCase('zh-CN');
       let visibleCount = 0;
       rows.forEach((row) => {
-        const matchesQuery = row.dataset.search.toLowerCase().includes(query);
+        const matchesQuery = getAccountSearchText(row).includes(query);
         const matchesCategory = activeFilter === '全部' || activeFilter === '最近' || row.dataset.category === activeFilter;
         const visible = matchesQuery && matchesCategory;
         row.hidden = !visible;
@@ -1382,6 +1427,7 @@
       });
       table.style.display = visibleCount ? 'table' : 'none';
       emptyState.style.display = visibleCount ? 'none' : 'grid';
+      clearSearchButton.hidden = !searchInput.value;
     }
 
     function showToast(message) {
@@ -1531,7 +1577,6 @@
       rows.forEach((row) => {
         if (row.dataset.category !== oldName) return;
         row.dataset.category = categoryName;
-        row.dataset.search = row.dataset.search.replaceAll(oldName, categoryName);
         const badge = row.querySelector('.category-badge');
         badge.dataset.category = categoryName;
         badge.textContent = categoryName;
@@ -1563,6 +1608,16 @@
     }
 
     searchInput.addEventListener('input', applyFilter);
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !searchInput.value) return;
+      searchInput.value = '';
+      applyFilter();
+    });
+    clearSearchButton.addEventListener('click', () => {
+      searchInput.value = '';
+      applyFilter();
+      searchInput.focus();
+    });
     document.querySelectorAll('.nav-item[data-filter]').forEach(bindFilterItem);
     getCategoryItems().forEach(bindCategoryContextItem);
 
@@ -1711,7 +1766,6 @@
       row.dataset.email = account.email;
       row.dataset.notes = account.notes;
       row.dataset.category = account.category;
-      row.dataset.search = [account.name, account.address, account.email, account.notes, account.category].join(' ').toLowerCase();
       row.querySelector('.service-mark').textContent = getAccountMark(account.name);
       row.querySelector('.account-name strong').textContent = account.name;
       row.querySelector('.account-name small').textContent = formatAccountAddress(account.address);
