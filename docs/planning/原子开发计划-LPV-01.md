@@ -4,7 +4,7 @@
 
 - 计划 ID：ATOMIC-LPV-01-001
 - 类型：atomic-development
-- 修订版本：2
+- 修订版本：3
 - 状态：active
 - 父级 ID：LPV-01
 - 创建基线：9a19d6e67c21afe49a8fcfdd10a829468877cd7b
@@ -98,7 +98,7 @@
 - 代码定位依据：`crates/vault-platform-windows/src/dpapi.rs` 和已固定的 `windows 0.62.2` features。
 - 允许修改：Windows 平台 crate 的 DPAPI 模块、所需精确 features、隔离集成测试；本原子状态记录。
 - 明确不修改：加密算法、文件发布、Tauri、前端和 macOS。
-- 实现步骤：调用 `CryptProtectData` / `CryptUnprotectData`；只用 `CRYPTPROTECT_UI_FORBIDDEN`；使用 RAII 管理 `LocalFree`；明文输出在释放前调用 `SecureZeroMemory`；校验解包长度为 32。
+- 实现步骤：调用 `CryptProtectData` / `CryptUnprotectData`；只用 `CRYPTPROTECT_UI_FORBIDDEN`；使用 RAII 管理 `LocalFree`；明文输出的完整实际 `cbData` 在释放前使用不会被编译器消除的 `zeroize` 清零；校验解包长度为 32。
 - 接口、数据与错误契约：错误只返回安全分类和内部 Win32 code；不记录输入或输出 blob；不启用 LocalMachine。
 - 边界与异常：测试仅使用随机合成密钥；非 32 字节解包结果被拒绝。
 - 测试要求：同用户往返；两次包装不要求字节相同但都能解包；篡改 blob 被拒绝；错误不包含密钥内容。
@@ -238,6 +238,7 @@
 |---|---|---|
 | 1 | 初始计划 | 首次拆分 LPV-01，并按用户要求在整体前端前设置停止点 |
 | 2 | 明确加密信封 AAD 边界 | DDD 反证指出仅靠结构校验不能证明头部元数据与密文绑定 |
+| 3 | 将 DPAPI 明文清理落实为 `zeroize` | windows-rs 没有头文件内联 `SecureZeroMemory` 的可调用绑定，使用防优化清零后再 `LocalFree` |
 
 ## 执行记录
 

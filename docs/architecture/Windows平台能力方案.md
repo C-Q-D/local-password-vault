@@ -22,7 +22,7 @@ windows = { version = "=0.62.2", features = [
 - flags 只启用 `CRYPTPROTECT_UI_FORBIDDEN`；不启用 `CRYPTPROTECT_LOCAL_MACHINE`，因此采用默认 CurrentUser 边界。
 - 不使用 optional entropy，避免引入没有独立保密价值的应用常量。
 - 解包结果必须恰好为 32 字节，随后还必须成功通过 AES-GCM 认证，不能根据单个 DPAPI 错误码判断数据完整性。
-- DPAPI 输出由局部 RAII guard 管理：包装后的缓冲复制完成后 `LocalFree`；解包后的明文缓冲先 `SecureZeroMemory`，再 `LocalFree`。
+- DPAPI 输出由局部 RAII guard 管理：包装后的缓冲复制完成后 `LocalFree`；解包后的完整实际 `cbData` 先使用 `zeroize` 做不会被编译器消除的清零，再 `LocalFree`。windows-rs 不提供 Windows 头文件内联 `SecureZeroMemory` 的可调用绑定，因此不伪造 DLL FFI。
 - Win32 错误码只进入内部错误来源，前端只接收稳定且不含敏感信息的错误分类。
 
 恢复边界保持为同一 Windows 用户配置；系统重装、换机或管理员重置用户密码不属于第一版可恢复范围。
