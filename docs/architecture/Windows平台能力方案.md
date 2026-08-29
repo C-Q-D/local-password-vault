@@ -37,6 +37,8 @@ windows = { version = "=0.62.2", features = [
 4. 使用 `MoveFileExW(temp, main, MOVEFILE_WRITE_THROUGH)`，不允许覆盖；
 5. 失败时 main 仍不存在，不能声明初始化成功。
 
+该协议处理应用崩溃、重复初始化和普通 I/O 失败。MVP 不把能够在当前用户数据目录任意删改文件、读取当前进程内存并调用同用户 DPAPI 的恶意进程作为文件竞态防护对象，因此不为 temp 路径抢换引入额外句柄重命名协议；应用自身通过唯一 `create_new` temp 和单实例写者避免协作范围内的竞争。
+
 ### 后续保存
 
 1. 同目录写入并 `sync_all` 唯一 temp；

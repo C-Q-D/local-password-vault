@@ -4,7 +4,7 @@
 
 - 计划 ID：ATOMIC-LPV-01-001
 - 类型：atomic-development
-- 修订版本：4
+- 修订版本：5
 - 状态：active
 - 父级 ID：LPV-01
 - 创建基线：9a19d6e67c21afe49a8fcfdd10a829468877cd7b
@@ -121,9 +121,9 @@
 - 代码定位依据：`crates/vault-platform-windows/src/atomic_file.rs`；官方 `MoveFileExW` 方案已记录。
 - 允许修改：Windows 文件模块、精确 feature、临时目录集成测试；本原子状态记录。
 - 明确不修改：后续 ReplaceFileW、backup、恢复、正式用户目录、Tauri 和前端。
-- 实现步骤：同目录 `create_new` 唯一 temp；写入并 `sync_all`；使用不带覆盖标志的 `MoveFileExW` 发布；读取 main；失败时清理本次可确认拥有的 temp。
+- 实现步骤：同目录 `create_new` 唯一 temp；写入并 `sync_all`；使用不带覆盖标志的 `MoveFileExW` 发布；从已打开句柄按 64 MiB + 1 限量读取 main；失败时清理本次创建的唯一 temp。
 - 接口、数据与错误契约：主文件存在时返回 AlreadyExists，不覆盖；所有路径由调用方显式传入；错误不包含文件内容。
-- 边界与异常：只允许当前存储实例生成的 temp 名；测试目录由 `tempfile` 创建。
+- 边界与异常：只允许当前存储实例生成的 temp 名；测试目录由 `tempfile` 创建；防应用自身崩溃、重复初始化和普通 I/O 失败，不试图抵抗可在当前用户数据目录中任意删改文件并调用同用户 DPAPI 的恶意进程。
 - 测试要求：首次发布/读取往返；已有 main 时拒绝并保持旧字节；空候选被拒绝；失败后 main 不出现半写内容。
 - 验证命令：`cargo test -p vault-platform-windows atomic_file`；目标 crate check；格式检查。
 - 预期结果：隔离目录中的真实 Windows 文件测试通过。
@@ -240,6 +240,7 @@
 | 2 | 明确加密信封 AAD 边界 | DDD 反证指出仅靠结构校验不能证明头部元数据与密文绑定 |
 | 3 | 将 DPAPI 明文清理落实为 `zeroize` | windows-rs 没有头文件内联 `SecureZeroMemory` 的可调用绑定，使用防优化清零后再 `LocalFree` |
 | 4 | 修正 DPAPI 篡改测试判据 | 微软文档说明损坏 blob 可能返回损坏输出，最终完整性必须由 AES-GCM 认证证明 |
+| 5 | 明确首次发布的本机威胁边界并采用有界句柄读取 | 不为越出当前用户信任边界的恶意文件竞争引入句柄重命名协议，同时吸收无界读取反例 |
 
 ## 执行记录
 
