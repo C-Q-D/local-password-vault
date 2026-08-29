@@ -12,4 +12,14 @@ pub trait VaultFiles {
 
     /// 有界读取当前主库的完整加密信封。
     fn read_main(&self) -> Result<Vec<u8>, VaultFileError>;
+
+    /// 读取上一份已同步完成的备份；平台不支持时返回 NotFound。
+    fn read_backup(&self) -> Result<Vec<u8>, VaultFileError> {
+        Err(VaultFileError::NotFound)
+    }
+
+    /// 用已经认证的备份恢复主库。
+    fn restore_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+        self.replace_main(candidate)
+    }
 }

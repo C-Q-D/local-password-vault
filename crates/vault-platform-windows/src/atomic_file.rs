@@ -10,11 +10,14 @@ use std::{
 
 use vault_storage::{MAX_ENVELOPE_SIZE, VaultFileError, VaultFiles};
 use windows::{
-    Win32::Storage::FileSystem::{MoveFileW, REPLACE_FILE_FLAGS, ReplaceFileW},
+    Win32::Storage::FileSystem::{
+        FileEncryptionStatusW, MoveFileW, REPLACE_FILE_FLAGS, ReplaceFileW,
+    },
     core::PCWSTR,
 };
 
 const MAIN_FILE_NAME: &str = "vault.dat";
+const BACKUP_FILE_NAME: &str = "vault.backup.dat";
 const TEMP_CREATE_ATTEMPTS: usize = 32;
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -32,6 +35,10 @@ impl WindowsVaultFiles {
 
     fn main_path(&self) -> PathBuf {
         self.root.join(MAIN_FILE_NAME)
+    }
+
+    fn backup_path(&self) -> PathBuf {
+        self.root.join(BACKUP_FILE_NAME)
     }
 
     fn create_owned_temp(&self) -> Result<OwnedTemp, VaultFileError> {
@@ -102,16 +109,7 @@ impl VaultFiles for WindowsVaultFiles {
     }
 
     fn read_main(&self) -> Result<Vec<u8>, VaultFileError> {
-        let file = File::open(self.main_path()).map_err(map_read_error)?;
-        let mut bytes = Vec::new();
-        // take 限制真实读取量，避免只依赖可能过期的 metadata 长度预检。
-        file.take((MAX_ENVELOPE_SIZE + 1) as u64)
-            .read_to_end(&mut bytes)
-            .map_err(|_| VaultFileError::Io)?;
-        if bytes.len() > MAX_ENVELOPE_SIZE {
-            return Err(VaultFileError::TooLarge);
-        }
-        Ok(bytes)
+        read_bounded(&self.main_path(), "read_main")
     }
 
     fn replace_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
@@ -125,6 +123,12 @@ impl VaultFiles for WindowsVaultFiles {
         let main_path = self.main_path();
         if !main_path.try_exists().map_err(|_| VaultFileError::Io)? {
             return Err(VaultFileError::NotFound);
+        }
+
+        if encryption_status(&main_path)? == 1 {
+            let previous = self.read_main()?;
+            write_synced(&self.backup_path(), &previous, true, "write_backup")?;
+            return write_synced(&main_path, candidate, false, "write_efs_main");
         }
 
         let mut temporary = self.create_owned_temp()?;
@@ -150,13 +154,92 @@ impl VaultFiles for WindowsVaultFiles {
                 None,
             )
         };
-        if replace_result.is_err() {
+        if let Err(error) = replace_result {
+            log_windows_error("replace_main", error.code().0 as u32);
             return Err(VaultFileError::Io);
         }
 
         temporary.mark_published();
         Ok(())
     }
+
+    fn read_backup(&self) -> Result<Vec<u8>, VaultFileError> {
+        read_bounded(&self.backup_path(), "read_backup")
+    }
+
+    fn restore_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+        validate_candidate(candidate)?;
+        write_synced(&self.main_path(), candidate, true, "restore_main")
+    }
+}
+
+fn encryption_status(path: &Path) -> Result<u32, VaultFileError> {
+    let path_wide = wide_path(path);
+    let mut encryption_status = 0_u32;
+    if let Err(error) = unsafe {
+        FileEncryptionStatusW(PCWSTR::from_raw(path_wide.as_ptr()), &mut encryption_status)
+    } {
+        log_windows_error("query_encryption_status", error.code().0 as u32);
+        return Err(VaultFileError::Io);
+    }
+    Ok(encryption_status)
+}
+
+fn validate_candidate(candidate: &[u8]) -> Result<(), VaultFileError> {
+    if candidate.is_empty() {
+        return Err(VaultFileError::EmptyCandidate);
+    }
+    if candidate.len() > MAX_ENVELOPE_SIZE {
+        return Err(VaultFileError::TooLarge);
+    }
+    Ok(())
+}
+
+fn write_synced(
+    path: &Path,
+    bytes: &[u8],
+    create: bool,
+    operation: &str,
+) -> Result<(), VaultFileError> {
+    let mut options = OpenOptions::new();
+    options.write(true).truncate(true).create(create);
+    let mut file = options.open(path).map_err(|error| {
+        log_io_error(operation, &error);
+        VaultFileError::Io
+    })?;
+    file.write_all(bytes).map_err(|error| {
+        log_io_error(operation, &error);
+        VaultFileError::Io
+    })?;
+    file.sync_all().map_err(|error| {
+        log_io_error(operation, &error);
+        VaultFileError::Io
+    })
+}
+
+fn read_bounded(path: &Path, operation: &str) -> Result<Vec<u8>, VaultFileError> {
+    let file = File::open(path).map_err(|error| map_read_error(operation, error))?;
+    let mut bytes = Vec::new();
+    file.take((MAX_ENVELOPE_SIZE + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            log_io_error(operation, &error);
+            VaultFileError::Io
+        })?;
+    if bytes.len() > MAX_ENVELOPE_SIZE {
+        return Err(VaultFileError::TooLarge);
+    }
+    Ok(bytes)
+}
+
+fn log_windows_error(operation: &str, code: u32) {
+    // 只记录操作类别和系统码，便于开发定位；不输出路径或密码库内容。
+    eprintln!("[vault-platform-windows] operation={operation} win32_code=0x{code:08X}");
+}
+
+fn log_io_error(operation: &str, error: &io::Error) {
+    let code = error.raw_os_error().unwrap_or_default();
+    eprintln!("[vault-platform-windows] operation={operation} os_code={code}");
 }
 
 fn wide_path(path: &Path) -> Vec<u16> {
@@ -166,10 +249,11 @@ fn wide_path(path: &Path) -> Vec<u16> {
         .collect()
 }
 
-fn map_read_error(error: io::Error) -> VaultFileError {
+fn map_read_error(operation: &str, error: io::Error) -> VaultFileError {
     if error.kind() == io::ErrorKind::NotFound {
         VaultFileError::NotFound
     } else {
+        log_io_error(operation, &error);
         VaultFileError::Io
     }
 }

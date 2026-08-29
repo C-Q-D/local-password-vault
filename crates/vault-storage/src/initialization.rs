@@ -17,10 +17,30 @@ pub fn open_or_initialize(
     key_protector: &impl KeyProtector,
 ) -> Result<OpenedVault, VaultOpenError> {
     match files.read_main() {
-        Ok(envelope) => open_confirmed(&envelope, key_protector, false),
-        Err(VaultFileError::NotFound) => initialize(files, key_protector),
-        Err(error) => Err(VaultOpenError::File(error)),
+        Ok(envelope) => match open_confirmed(&envelope, key_protector, false) {
+            Ok(opened) => Ok(opened),
+            Err(main_error) => recover_backup(files, key_protector)?.ok_or(main_error),
+        },
+        Err(VaultFileError::NotFound) => recover_backup(files, key_protector)?
+            .map_or_else(|| initialize(files, key_protector), Ok),
+        Err(error) => recover_backup(files, key_protector)?.ok_or(VaultOpenError::File(error)),
     }
+}
+
+/// 备份必须先通过完整认证和领域校验，之后才允许恢复为主库。
+fn recover_backup(
+    files: &impl VaultFiles,
+    key_protector: &impl KeyProtector,
+) -> Result<Option<OpenedVault>, VaultOpenError> {
+    let backup = match files.read_backup() {
+        Ok(backup) => backup,
+        Err(VaultFileError::NotFound) => return Ok(None),
+        Err(error) => return Err(VaultOpenError::File(error)),
+    };
+    open_confirmed(&backup, key_protector, false)?;
+    files.restore_main(&backup).map_err(VaultOpenError::File)?;
+    let restored = files.read_main().map_err(VaultOpenError::File)?;
+    Ok(Some(open_confirmed(&restored, key_protector, false)?))
 }
 
 /// 保存完整候选后重新读取和认证磁盘主库，只返回已经确认的文档。
@@ -80,6 +100,7 @@ mod tests {
     #[derive(Default)]
     struct MemoryFiles {
         main: Mutex<Option<Vec<u8>>>,
+        backup: Mutex<Option<Vec<u8>>>,
         fail_replace: bool,
         corrupt_replacement: bool,
     }
@@ -116,6 +137,19 @@ mod tests {
                 .expect("测试互斥锁不应中毒")
                 .clone()
                 .ok_or(VaultFileError::NotFound)
+        }
+
+        fn read_backup(&self) -> Result<Vec<u8>, VaultFileError> {
+            self.backup
+                .lock()
+                .expect("测试互斥锁不应中毒")
+                .clone()
+                .ok_or(VaultFileError::NotFound)
+        }
+
+        fn restore_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+            *self.main.lock().expect("测试互斥锁不应中毒") = Some(candidate.to_vec());
+            Ok(())
         }
     }
 
@@ -211,6 +245,7 @@ mod tests {
         let previous = files.read_main().expect("主库应存在");
         let failing_files = MemoryFiles {
             main: Mutex::new(Some(previous.clone())),
+            backup: Mutex::new(None),
             fail_replace: true,
             corrupt_replacement: false,
         };
@@ -230,6 +265,7 @@ mod tests {
         open_or_initialize(&files, &TestKeyProtector).expect("应先创建主库");
         let corrupting_files = MemoryFiles {
             main: Mutex::new(files.main.lock().expect("测试互斥锁不应中毒").clone()),
+            backup: Mutex::new(None),
             fail_replace: false,
             corrupt_replacement: true,
         };
@@ -242,5 +278,25 @@ mod tests {
             ),
             Err(VaultOpenError::Envelope(_))
         ));
+    }
+
+    #[test]
+    fn authenticated_backup_restores_a_corrupted_main() {
+        let mut recovered_document = VaultDocument::empty();
+        recovered_document.revision = 3;
+        recovered_document
+            .create_category("工作")
+            .expect("测试分类应创建成功");
+        let backup = seal(&recovered_document, &TestKeyProtector).expect("测试备份应生成");
+        let files = MemoryFiles {
+            main: Mutex::new(Some(b"corrupted-main".to_vec())),
+            backup: Mutex::new(Some(backup.clone())),
+            ..MemoryFiles::default()
+        };
+
+        let opened = open_or_initialize(&files, &TestKeyProtector).expect("有效备份应恢复主库");
+
+        assert_eq!(opened.document, recovered_document);
+        assert_eq!(files.read_main(), Ok(backup));
     }
 }
