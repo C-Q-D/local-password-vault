@@ -28,6 +28,8 @@ pub enum VaultValidationError {
 pub enum CategoryError {
     #[error("分类不存在")]
     NotFound,
+    #[error("分类中仍有账号")]
+    NotEmpty,
     #[error("分类名称不能为空")]
     BlankName,
     #[error("分类名称已经存在")]

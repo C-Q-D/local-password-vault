@@ -78,6 +78,25 @@ impl VaultDocument {
         Ok(())
     }
 
+    /// 只删除没有账号引用的分类，绝不级联删除或移动账号。
+    pub fn delete_category(&mut self, id: Uuid) -> Result<(), CategoryError> {
+        let target_index = self
+            .categories
+            .iter()
+            .position(|category| category.id == id)
+            .ok_or(CategoryError::NotFound)?;
+        if self
+            .accounts
+            .iter()
+            .any(|account| account.category_id == Some(id))
+        {
+            return Err(CategoryError::NotEmpty);
+        }
+
+        self.categories.remove(target_index);
+        Ok(())
+    }
+
     /// 校验载入和保存共同依赖的领域不变量。
     ///
     /// 校验集中在这里，避免不同读写路径对损坏数据作出不一致判断。
@@ -247,6 +266,39 @@ mod tests {
         assert_eq!(
             document.rename_category(target.id, " 个人 "),
             Err(CategoryError::DuplicateName)
+        );
+        assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn delete_category_removes_only_an_empty_target() {
+        let mut document = VaultDocument::empty();
+        let target = document.create_category("工作").expect("分类应创建成功");
+        let untouched = document.create_category("个人").expect("分类应创建成功");
+
+        document
+            .delete_category(target.id)
+            .expect("空分类应删除成功");
+
+        assert_eq!(document.categories, vec![untouched]);
+        assert!(document.accounts.is_empty());
+    }
+
+    #[test]
+    fn delete_category_rejects_non_empty_or_unknown_target_without_mutation() {
+        let mut document = VaultDocument::empty();
+        let target = document.create_category("工作").expect("分类应创建成功");
+        document.accounts.push(valid_account(Some(target.id)));
+        let confirmed = document.clone();
+
+        assert_eq!(
+            document.delete_category(target.id),
+            Err(CategoryError::NotEmpty)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.delete_category(Uuid::new_v4()),
+            Err(CategoryError::NotFound)
         );
         assert_eq!(document, confirmed);
     }

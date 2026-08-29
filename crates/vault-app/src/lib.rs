@@ -35,6 +35,7 @@ pub trait VaultRepository: Send + Sync {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VaultApplicationError {
     CategoryNotFound,
+    CategoryNotEmpty,
     CategoryNameEmpty,
     CategoryNameDuplicate,
     VaultSaveFailed,
@@ -138,6 +139,7 @@ impl VaultApplication {
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
     match error {
         CategoryError::NotFound => VaultApplicationError::CategoryNotFound,
+        CategoryError::NotEmpty => VaultApplicationError::CategoryNotEmpty,
         CategoryError::BlankName => VaultApplicationError::CategoryNameEmpty,
         CategoryError::DuplicateName => VaultApplicationError::CategoryNameDuplicate,
     }

@@ -66,6 +66,10 @@ impl From<VaultApplicationError> for CommandErrorDto {
                 code: "CATEGORY_NOT_FOUND",
                 message: "分类不存在，请重新加载",
             },
+            VaultApplicationError::CategoryNotEmpty => Self {
+                code: "CATEGORY_NOT_EMPTY",
+                message: "分类中仍有账号，不能删除",
+            },
             VaultApplicationError::CategoryNameEmpty => Self {
                 code: "CATEGORY_NAME_EMPTY",
                 message: "分类名称不能为空",
