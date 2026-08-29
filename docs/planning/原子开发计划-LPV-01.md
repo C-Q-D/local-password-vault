@@ -38,8 +38,8 @@
 | 3 | LPV-01-03 使用 DPAPI 保护数据密钥 | LPV-01-02 | L3 | done |
 | 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | done |
 | 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | done |
-| 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | in_progress |
-| 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | pending |
+| 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | done |
+| 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | in_progress |
 | 8 | LPV-01-08 按参考图实现整体主界面 | LPV-01-07、项目所有者参考图 | L1 | pending |
 
 ## LPV-01-01 定义空密码库文档
@@ -159,7 +159,7 @@
 
 ## LPV-01-06 持有 Windows 单实例锁
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：第二实例不会同时读取或写入同一密码库。
 - 唯一目标：Windows 平台在指定数据目录获取并持有 `vault.lock` 独占锁，直到 guard 释放。
 - 当前行为与目标行为：`process_lock.rs` 只有模块说明；完成后同目录第二次获取明确返回 Busy。
@@ -182,7 +182,7 @@
 
 ## LPV-01-07 暴露启动状态 command
 
-- 状态：pending
+- 状态：in_progress
 - 支持的验收场景：前端可以调用后端获得空库状态，不直接接触文件或密钥。
 - 唯一目标：`vault-app` 持有锁和已确认空库快照，Tauri 暴露 `load_vault` 返回安全启动 DTO。
 - 当前行为与目标行为：当前只有实验 command；完成后组合真实 Windows DPAPI、文件实现和应用状态，并注册 `load_vault`。
@@ -282,3 +282,11 @@
 - DDD 记录：实现前声明 PASS；真实代码和测试完成后再次复核为 PASS。
 - 验证证据：storage 8 项测试、Windows 平台 9 项测试（含 tempfile + 真实 DPAPI + AES-GCM + 文件重开链路）、目标 checks、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
 - 范围确认：未实现后续替换、backup、锁、Tauri、前端或分类账号操作。
+
+### LPV-01-06
+
+- 完成结果：实现 `vault.lock` 的 Windows 独占打开 guard；guard 存活时同目录第二次获取稳定返回 `Busy`，释放后可重新获取。
+- 生命周期证据：`CreateFileW` 使用读写访问、`FILE_SHARE_NONE` 和 `OPEN_ALWAYS`；guard 不可克隆，`Drop` 调用 `CloseHandle`，异常退出由 Windows 回收句柄。
+- DDD 记录：实现前声明 PASS；真实代码和测试完成后再次复核为 PASS。
+- 验证证据：锁生命周期和无效数据根 2 项隔离测试、目标 check、clippy `-D warnings`、格式和 diff 检查均通过。
+- 范围确认：锁文件不含业务数据；未实现进程发现、强制结束、Tauri 提示或密码库组合。

@@ -3955,6 +3955,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "tempfile",
+ "thiserror 2.0.20",
  "vault-storage",
  "windows 0.62.2",
  "zeroize",
