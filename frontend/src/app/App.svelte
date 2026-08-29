@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import {
+    createAccount,
     createCategory,
     deleteCategory,
     loadVault,
     renameCategory,
+    type AccountSummary,
     type CategorySummary,
     type CommandError,
     type VaultStatus,
@@ -27,6 +29,25 @@
   let categoryError = "";
   let categorySubmitting = false;
   let categoryInput: HTMLInputElement;
+  let accountDialogOpen = false;
+  let accountSubmitting = false;
+  let accountError = "";
+  let accountUsernameError = "";
+  let accountPasswordError = "";
+  let accountPasswordVisible = false;
+  let accountUsernameInput: HTMLInputElement;
+  let accountDraft = emptyAccountDraft();
+
+  function emptyAccountDraft() {
+    return {
+      username: "",
+      password: "",
+      address: "",
+      email: "",
+      notes: "",
+      categoryId: "uncategorized",
+    };
+  }
 
   /** 每次只接受 Rust 已确认的摘要；调用失败时不伪装成空密码库。 */
   async function refreshVault() {
@@ -98,6 +119,84 @@
   function selectedViewName(): string {
     if (selectedCategoryId === "uncategorized") return "未分类";
     return selectedCategory()?.name ?? "全部账号";
+  }
+
+  function visibleAccounts(): AccountSummary[] {
+    const accounts = vault?.accounts ?? [];
+    const filtered = selectedCategoryId === null
+      ? accounts
+      : selectedCategoryId === "uncategorized"
+        ? accounts.filter((account) => account.categoryId === null)
+        : accounts.filter((account) => account.categoryId === selectedCategoryId);
+    // 当前尚未接入最近使用时间，新创建记录按持久化顺序显示在前面。
+    return [...filtered].reverse();
+  }
+
+  function accountCategoryName(categoryId: string | null): string {
+    if (!categoryId) return "未分类";
+    return vault?.categories.find((category) => category.id === categoryId)?.name ?? "未知分类";
+  }
+
+  /** 新增账号每次都使用全新的 Draft，取消后不会残留上一次输入。 */
+  function openAccountDialog() {
+    accountDraft = emptyAccountDraft();
+    if (selectedCategoryId && selectedCategoryId !== "uncategorized") {
+      accountDraft.categoryId = selectedCategoryId;
+    }
+    accountError = "";
+    accountUsernameError = "";
+    accountPasswordError = "";
+    accountPasswordVisible = false;
+    accountDialogOpen = true;
+    requestAnimationFrame(() => accountUsernameInput?.focus());
+  }
+
+  /** 关闭、取消和 Esc 只丢弃 Draft，不触发字段校验。 */
+  function closeAccountDialog() {
+    if (accountSubmitting) return;
+    accountDialogOpen = false;
+    accountDraft = emptyAccountDraft();
+    accountError = "";
+    accountUsernameError = "";
+    accountPasswordError = "";
+  }
+
+  function optionalField(value: string): string | null {
+    return value.trim() ? value : null;
+  }
+
+  async function submitAccount(event: SubmitEvent) {
+    event.preventDefault();
+    accountUsernameError = accountDraft.username.trim() ? "" : "请输入账号名";
+    accountPasswordError = accountDraft.password.trim() ? "" : "请输入密码";
+    accountError = "";
+    if (accountUsernameError || accountPasswordError) {
+      if (accountUsernameError) accountUsernameInput?.focus();
+      return;
+    }
+
+    accountSubmitting = true;
+    try {
+      vault = await createAccount({
+        categoryId: accountDraft.categoryId === "uncategorized" ? null : accountDraft.categoryId,
+        username: accountDraft.username,
+        password: accountDraft.password,
+        address: optionalField(accountDraft.address),
+        email: optionalField(accountDraft.email),
+        notes: optionalField(accountDraft.notes),
+      });
+      accountDialogOpen = false;
+      accountDraft = emptyAccountDraft();
+      showNotice("账号已保存");
+    } catch (error) {
+      const commandError = error as Partial<CommandError> | null;
+      if (commandError?.code === "ACCOUNT_USERNAME_REQUIRED") accountUsernameError = "请输入账号名";
+      else if (commandError?.code === "ACCOUNT_PASSWORD_REQUIRED") accountPasswordError = "请输入密码";
+      else if (commandError?.code === "CATEGORY_NOT_FOUND") accountError = "所选分类不存在，请重新选择";
+      else accountError = commandError?.message || "账号保存失败，请重试";
+    } finally {
+      accountSubmitting = false;
+    }
   }
 
   function requestDeleteCategory(category: CategorySummary) {
@@ -187,6 +286,7 @@
     categoryMenu = null;
     if (pendingDeleteCategory) cancelDeleteCategory();
     if (categoryDialogOpen) closeCategoryDialog();
+    if (accountDialogOpen) closeAccountDialog();
   }
 
   function handleWindowClick() {
@@ -260,7 +360,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
             {status === "loading" ? "加载中" : "重新加载"}
           </button>
-          <button class="primary-button" type="button" disabled title="等待账号后端接入">
+          <button class="primary-button" type="button" onclick={openAccountDialog} disabled={status !== "ready"}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             新增账号
           </button>
@@ -353,12 +453,29 @@
                     <th aria-label="操作"></th>
                   </tr>
                 </thead>
+                {#if visibleAccounts().length > 0}
+                  <tbody>
+                    {#each visibleAccounts() as account (account.id)}
+                      <tr>
+                        <td><strong class="account-name">{account.username}</strong></td>
+                        <td title={account.address ?? ""}>{account.address || "—"}</td>
+                        <td title={account.email ?? ""}>{account.email || "—"}</td>
+                        <td>{accountCategoryName(account.categoryId)}</td>
+                        <td><span class="password-saved">已保存</span></td>
+                        <td>未使用</td>
+                        <td><span class="row-placeholder" aria-label="账号操作将在后续接入">•••</span></td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                {/if}
               </table>
-              <div class="empty-state">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
-                <strong>{status === "loading" ? "正在读取账号" : "还没有保存账号"}</strong>
-                <span>{status === "loading" ? "请稍候" : "新增账号功能接入后，可在这里管理账号"}</span>
-              </div>
+              {#if visibleAccounts().length === 0}
+                <div class="empty-state">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
+                  <strong>{status === "loading" ? "正在读取账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
+                  <span>{status === "loading" ? "请稍候" : "点击右上角“新增账号”保存第一条记录"}</span>
+                </div>
+              {/if}
             </div>
           </section>
         {/if}
@@ -377,6 +494,64 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
       删除
     </button>
+  </div>
+{/if}
+
+{#if accountDialogOpen}
+  <div class="dialog-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && closeAccountDialog()}>
+    <div class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
+      <form onsubmit={submitAccount} novalidate>
+        <header class="dialog-head">
+          <h2 id="account-dialog-title">新增账号</h2>
+          <button class="dialog-close" type="button" onclick={closeAccountDialog} disabled={accountSubmitting} aria-label="关闭">×</button>
+        </header>
+        <div class="dialog-body account-form">
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="account-username">账号名 <span>*</span></label>
+              <input id="account-username" class:invalid={Boolean(accountUsernameError)} bind:this={accountUsernameInput} bind:value={accountDraft.username} oninput={() => (accountUsernameError = "")} autocomplete="off" placeholder="例如：GitHub 工作账号" disabled={accountSubmitting} />
+              {#if accountUsernameError}<p class="field-error" role="alert">{accountUsernameError}</p>{/if}
+            </div>
+            <div class="field">
+              <label class="field-label" for="account-category">分类 <span>*</span></label>
+              <select id="account-category" bind:value={accountDraft.categoryId} disabled={accountSubmitting}>
+                {#each vault?.categories ?? [] as category (category.id)}
+                  <option value={category.id}>{category.name}</option>
+                {/each}
+                <option value="uncategorized">未分类</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="account-password">密码 <span>*</span></label>
+            <div class="password-input">
+              <input id="account-password" class:invalid={Boolean(accountPasswordError)} type={accountPasswordVisible ? "text" : "password"} bind:value={accountDraft.password} oninput={() => (accountPasswordError = "")} autocomplete="new-password" placeholder="请输入密码" disabled={accountSubmitting} />
+              <button type="button" onclick={() => (accountPasswordVisible = !accountPasswordVisible)} disabled={accountSubmitting}>{accountPasswordVisible ? "隐藏" : "显示"}</button>
+            </div>
+            {#if accountPasswordError}<p class="field-error" role="alert">{accountPasswordError}</p>{/if}
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="account-address">地址</label>
+              <input id="account-address" bind:value={accountDraft.address} autocomplete="off" placeholder="https://example.com" disabled={accountSubmitting} />
+            </div>
+            <div class="field">
+              <label class="field-label" for="account-email">邮箱</label>
+              <input id="account-email" type="email" bind:value={accountDraft.email} autocomplete="off" placeholder="name@example.com" disabled={accountSubmitting} />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="account-notes">备注</label>
+            <textarea id="account-notes" bind:value={accountDraft.notes} rows="3" placeholder="可选备注" disabled={accountSubmitting}></textarea>
+          </div>
+          {#if accountError}<p class="field-error account-submit-error" role="alert">{accountError}</p>{/if}
+        </div>
+        <footer class="dialog-foot">
+          <button class="secondary-button" type="button" onclick={closeAccountDialog} disabled={accountSubmitting}>取消</button>
+          <button class="primary-button" type="submit" disabled={accountSubmitting}>{accountSubmitting ? "保存中" : "保存账号"}</button>
+        </footer>
+      </form>
+    </div>
   </div>
 {/if}
 
@@ -434,3 +609,4 @@
     </div>
   </div>
 {/if}
+    type AccountSummary,
