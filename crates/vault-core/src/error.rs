@@ -13,10 +13,21 @@ pub enum VaultValidationError {
     DuplicateAccountId,
     #[error("分类名称不能为空")]
     BlankCategoryName,
+    #[error("分类名称重复")]
+    DuplicateCategoryName,
     #[error("账号引用的分类不存在")]
     MissingCategory,
     #[error("账号名不能为空")]
     BlankUsername,
     #[error("密码不能为空")]
     BlankPassword,
+}
+
+/// 分类写操作返回的稳定业务错误，不携带用户输入内容。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum CategoryError {
+    #[error("分类名称不能为空")]
+    BlankName,
+    #[error("分类名称已经存在")]
+    DuplicateName,
 }

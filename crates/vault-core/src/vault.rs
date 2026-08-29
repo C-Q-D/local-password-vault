@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::VaultValidationError;
+use crate::{CategoryError, VaultValidationError};
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -31,6 +31,30 @@ impl VaultDocument {
         }
     }
 
+    /// 在当前候选文档中创建一个名称唯一的用户分类。
+    pub fn create_category(&mut self, name: &str) -> Result<Category, CategoryError> {
+        let display_name = name.trim();
+        if display_name.is_empty() {
+            return Err(CategoryError::BlankName);
+        }
+
+        let normalized_name = normalize_category_name(display_name);
+        if self
+            .categories
+            .iter()
+            .any(|category| normalize_category_name(&category.name) == normalized_name)
+        {
+            return Err(CategoryError::DuplicateName);
+        }
+
+        let category = Category {
+            id: Uuid::new_v4(),
+            name: display_name.to_owned(),
+        };
+        self.categories.push(category.clone());
+        Ok(category)
+    }
+
     /// 校验载入和保存共同依赖的领域不变量。
     ///
     /// 校验集中在这里，避免不同读写路径对损坏数据作出不一致判断。
@@ -40,12 +64,16 @@ impl VaultDocument {
         }
 
         let mut category_ids = HashSet::with_capacity(self.categories.len());
+        let mut category_names = HashSet::with_capacity(self.categories.len());
         for category in &self.categories {
             if !category_ids.insert(category.id) {
                 return Err(VaultValidationError::DuplicateCategoryId);
             }
             if category.name.trim().is_empty() {
                 return Err(VaultValidationError::BlankCategoryName);
+            }
+            if !category_names.insert(normalize_category_name(&category.name)) {
+                return Err(VaultValidationError::DuplicateCategoryName);
             }
         }
 
@@ -70,6 +98,10 @@ impl VaultDocument {
 
         Ok(())
     }
+}
+
+fn normalize_category_name(name: &str) -> String {
+    name.trim().to_lowercase()
 }
 
 impl Default for VaultDocument {
@@ -122,6 +154,60 @@ mod tests {
         assert!(document.categories.is_empty());
         assert!(document.accounts.is_empty());
         assert_eq!(document.validate(), Ok(()));
+    }
+
+    #[test]
+    fn category_creation_trims_name_and_assigns_unique_id() {
+        let mut document = VaultDocument::empty();
+
+        let category = document
+            .create_category("  工作  ")
+            .expect("有效分类应创建成功");
+
+        assert_eq!(category.name, "工作");
+        assert_eq!(document.categories, vec![category]);
+        assert_eq!(document.validate(), Ok(()));
+    }
+
+    #[test]
+    fn category_creation_rejects_blank_and_normalized_duplicates_without_mutation() {
+        let mut document = VaultDocument::empty();
+        let original = document.clone();
+        assert_eq!(
+            document.create_category(" \n\t "),
+            Err(CategoryError::BlankName)
+        );
+        assert_eq!(document, original);
+
+        document
+            .create_category("Development")
+            .expect("首个分类应创建成功");
+        let confirmed = document.clone();
+        assert_eq!(
+            document.create_category(" development "),
+            Err(CategoryError::DuplicateName)
+        );
+        assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn document_validation_rejects_normalized_duplicate_category_names() {
+        let mut document = VaultDocument::empty();
+        document.categories = vec![
+            Category {
+                id: Uuid::new_v4(),
+                name: "Work".to_owned(),
+            },
+            Category {
+                id: Uuid::new_v4(),
+                name: " work ".to_owned(),
+            },
+        ];
+
+        assert_eq!(
+            document.validate(),
+            Err(VaultValidationError::DuplicateCategoryName)
+        );
     }
 
     #[test]
