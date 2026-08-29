@@ -15,6 +15,7 @@ tauri-build = { version = "=2.6.3", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "=2.11.5", features = [] }
 vault-app = { path = "../crates/vault-app" }
+vault-storage = { path = "../crates/vault-storage" }
 
 [target.'cfg(windows)'.dependencies]
 vault-platform-windows = { path = "../crates/vault-platform-windows" }

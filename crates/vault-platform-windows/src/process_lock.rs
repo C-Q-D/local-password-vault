@@ -29,6 +29,15 @@ pub struct ProcessLockGuard {
     handle: HANDLE,
 }
 
+// SAFETY: handle 仅保存 CreateFileW 返回的进程级文件句柄，不与创建线程绑定。
+// 字段私有、guard 不可 Clone/Copy 且没有提前关闭入口，跨线程移动只转移唯一所有权，
+// 因此最终任意线程中的 Drop 至多调用一次 CloseHandle。
+unsafe impl Send for ProcessLockGuard {}
+
+// SAFETY: 共享引用不能复制、使用或关闭私有句柄；Rust 会在所有安全借用结束后才 Drop，
+// 因而共享 guard 不会造成句柄操作与 CloseHandle 并发，也不会重复关闭。
+unsafe impl Sync for ProcessLockGuard {}
+
 impl ProcessLockGuard {
     /// 在指定数据目录打开或创建 `vault.lock`，并拒绝任何共享打开。
     pub fn acquire(data_root: &Path) -> Result<Self, ProcessLockError> {

@@ -1900,6 +1900,7 @@ dependencies = [
  "tauri-build",
  "vault-app",
  "vault-platform-windows",
+ "vault-storage",
 ]
 
 [[package]]

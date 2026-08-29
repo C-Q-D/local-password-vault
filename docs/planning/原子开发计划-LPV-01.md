@@ -5,7 +5,7 @@
 - 计划 ID：ATOMIC-LPV-01-001
 - 类型：atomic-development
 - 修订版本：5
-- 状态：active
+- 状态：blocked
 - 父级 ID：LPV-01
 - 创建基线：9a19d6e67c21afe49a8fcfdd10a829468877cd7b
 
@@ -39,8 +39,8 @@
 | 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | done |
 | 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | done |
 | 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | done |
-| 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | in_progress |
-| 8 | LPV-01-08 按参考图实现整体主界面 | LPV-01-07、项目所有者参考图 | L1 | pending |
+| 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | done |
+| 8 | LPV-01-08 按参考图实现整体主界面 | LPV-01-07、项目所有者参考图 | L1 | blocked |
 
 ## LPV-01-01 定义空密码库文档
 
@@ -182,7 +182,7 @@
 
 ## LPV-01-07 暴露启动状态 command
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：前端可以调用后端获得空库状态，不直接接触文件或密钥。
 - 唯一目标：`vault-app` 持有锁和已确认空库快照，Tauri 暴露 `load_vault` 返回安全启动 DTO。
 - 当前行为与目标行为：当前只有实验 command；完成后组合真实 Windows DPAPI、文件实现和应用状态，并注册 `load_vault`。
@@ -205,7 +205,7 @@
 
 ## LPV-01-08 按参考图实现整体主界面
 
-- 状态：pending
+- 状态：blocked
 - 支持的验收场景：用户启动后直接看到分类区、账号列表、详情、搜索入口和空状态。
 - 唯一目标：依据项目所有者提供的参考图实现 LPV-01 所需整体主界面，并调用 `load_vault` 展示真实空状态。
 - 当前行为与目标行为：当前是技术实验页面；目标布局和视觉风格等待参考图确定。
@@ -290,3 +290,16 @@
 - DDD 记录：实现前声明 PASS；真实代码和测试完成后再次复核为 PASS。
 - 验证证据：锁生命周期和无效数据根 2 项隔离测试、目标 check、clippy `-D warnings`、格式和 diff 检查均通过。
 - 范围确认：锁文件不含业务数据；未实现进程发现、强制结束、Tauri 提示或密码库组合。
+
+### LPV-01-07
+
+- 完成结果：`VaultApplication` 持有单实例 guard 和已确认文档；Tauri 启动按“取锁 → 初始化/加载 → manage state”组合；`load_vault` 返回 5 个安全摘要字段。
+- 所有权证据：应用测试证明状态销毁前 guard 不释放；windows-rs HANDLE 的窄范围 `Send/Sync` 声明经隔离反证与实际 diff 两次确认 PASS，安全注释记录唯一所有权和无提前关闭入口。
+- 验证证据：`cargo test --workspace` 全部通过（29 项单元/集成测试）；`npm run check` 为 0 error / 0 warning；目标 checks、clippy `-D warnings`、格式和 diff 检查均通过。
+- 范围确认：未修改 `frontend/`，未执行 Release，未启动整体界面开发。
+
+### LPV-01-08 等待条件
+
+- 阻断原因：项目所有者明确要求整体前端开始前停止，并将另行提供参考图。
+- 已具备输入：真实 `load_vault` command 及空库启动 DTO 已可供前端消费。
+- 恢复动作：收到参考图后先确认布局区域和视觉规则，再把本原子改回 `in_progress`；不提前沿用技术实验页或并行 HTML 原型作为最终界面。
