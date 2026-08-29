@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Vault · 界面原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8f8f7;
+      --surface: #ffffff;
+      --surface-soft: #fafafa;
+      --surface-muted: #f5f5f4;
+      --line: #e7e7e5;
+      --line-strong: #d9d9d6;
+      --text: #171717;
+      --text-secondary: #626262;
+      --text-muted: #90908d;
+      --brand: #332f93;
+      --brand-soft: #efeffa;
+      --success: #257a55;
+      --success-soft: #eaf5ef;
+      --warning: #a66a1f;
+      --warning-soft: #faf1e3;
+      --danger: #b54a4a;
+      --radius: 11px;
+      --radius-small: 8px;
+      --sidebar-width: 218px;
+      --shadow-float: 0 16px 44px rgba(26, 26, 26, 0.12);
+      font-family: "SF Pro Display", "SF Pro Text", Geist, "Helvetica Neue", Arial, sans-serif;
+      font-synthesis: none;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 1080px;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    svg {
+      display: block;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 左侧导航保持紧凑，复现参考图的工具型后台布局。 */
+    .sidebar {
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: #fbfbfa;
+      padding: 20px 10px 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      height: 34px;
+      padding: 0 10px;
+      color: #24205f;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.55px;
+    }
+
+    .brand-mark {
+      position: relative;
+      width: 25px;
+      height: 25px;
+      color: var(--brand);
+    }
+
+    .nav-label {
+      margin: 24px 10px 8px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-list {
+      display: grid;
+      gap: 3px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .nav-item {
+      display: flex;
+      width: 100%;
+      height: 34px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      padding: 0 10px;
+      color: #5d5d5a;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    .nav-item:hover {
+      background: #f3f3f1;
+      color: #2a2a29;
+    }
+
+    .nav-item.active {
+      border-color: var(--line-strong);
+      background: var(--surface);
+      color: #252525;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.035);
+      font-weight: 500;
+    }
+
+    .nav-item .icon,
+    .button-icon,
+    .section-icon {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+      color: currentColor;
+    }
+
+    .nav-item .count {
+      min-width: 22px;
+      margin-left: auto;
+      border-radius: 999px;
+      background: #eeeeec;
+      padding: 2px 6px;
+      color: #777773;
+      font-size: 10px;
+      text-align: center;
+    }
+
+    .category-dot {
+      width: 7px;
+      height: 7px;
+      margin: 0 4px;
+      border-radius: 50%;
+      background: #8f8f8b;
+    }
+
+    .category-dot.work { background: #5e6db2; }
+    .category-dot.dev { background: #9a7048; }
+    .category-dot.personal { background: #4f8069; }
+
+    .sidebar-bottom {
+      display: grid;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .vault-status {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      border-radius: 10px;
+      background: #f5f5f3;
+      padding: 10px;
+    }
+
+    .status-ring {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      border: 5px solid #e4e4e1;
+      border-top-color: #6762ba;
+      border-radius: 50%;
+      color: var(--brand);
+    }
+
+    .status-ring svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .vault-status strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .vault-status span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 9.5px;
+      line-height: 1.35;
+    }
+
+    .sidebar-divider {
+      height: 1px;
+      margin: 2px 0;
+      background: var(--line);
+    }
+
+    .profile {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) 16px;
+      gap: 9px;
+      align-items: center;
+      padding: 8px 9px;
+      border-radius: 9px;
+      cursor: default;
+    }
+
+    .profile:hover {
+      background: #f3f3f1;
+    }
+
+    .avatar {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border: 1px solid #dededb;
+      border-radius: 8px;
+      background: var(--surface);
+      color: #474747;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .profile strong,
+    .profile span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .profile strong {
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .profile span {
+      margin-top: 2px;
+      color: var(--text-muted);
+      font-size: 9px;
+    }
+
+    .main-wrap {
+      min-width: 0;
+      height: 100%;
+      padding: 12px 12px 12px 0;
+    }
+
+    .workspace {
+      display: flex;
+      min-width: 0;
+      height: 100%;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--surface);
+    }
+
+    .topbar {
+      display: flex;
+      min-height: 58px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 25px;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 630;
+      letter-spacing: -0.28px;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search-box {
+      display: flex;
+      width: 238px;
+      height: 34px;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fcfcfb;
+      padding: 0 10px;
+      color: var(--text-muted);
+    }
+
+    .search-box svg {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 15px;
+    }
+
+    .search-box input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 11px;
+    }
+
+    .search-box input::placeholder {
+      color: #a3a3a0;
+    }
+
+    .icon-button,
+    .secondary-button,
+    .primary-button {
+      display: inline-flex;
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border-radius: 8px;
+      padding: 0 11px;
+      font-size: 11px;
+      font-weight: 520;
+      cursor: pointer;
+      transition: background-color 120ms ease, border-color 120ms ease;
+    }
+
+    .icon-button,
+    .secondary-button {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: #4d4d4a;
+    }
+
+    .icon-button {
+      width: 34px;
+      padding: 0;
+    }
+
+    .icon-button:hover,
+    .secondary-button:hover {
+      border-color: #d2d2ce;
+      background: #f8f8f6;
+    }
+
+    .primary-button {
+      border: 1px solid #252525;
+      background: #252525;
+      color: #fff;
+    }
+
+    .primary-button:hover {
+      background: #101010;
+    }
+
+    .content-scroll {
+      min-height: 0;
+      flex: 1;
+      overflow: auto;
+      padding: 14px 25px 26px;
+      scrollbar-color: #d9d9d6 transparent;
+      scrollbar-width: thin;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 11px;
+    }
+
+    .metric-card {
+      min-height: 112px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 15px 14px 13px;
+    }
+
+    .metric-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #4b4b49;
+      font-size: 11px;
+      font-weight: 520;
+    }
+
+    .metric-title svg {
+      width: 14px;
+      height: 14px;
+      color: #62625f;
+    }
+
+    .metric-value {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      margin-top: 17px;
+      font-size: 21px;
+      font-weight: 530;
+      letter-spacing: -0.45px;
+    }
+
+    .metric-value small {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 450;
+      letter-spacing: 0;
+    }
+
+    .metric-note {
+      margin: 12px 0 0;
+      color: var(--text-muted);
+      font-size: 9.5px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 6px;
+      background: var(--success-soft);
+      padding: 4px 7px;
+      color: var(--success);
+      font-size: 9px;
+      font-weight: 620;
+    }
+
+    .status-pill::before {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      content: "";
+    }
+
+    .panel {
+      margin-top: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .panel-head {
+      display: flex;
+      min-height: 58px;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 13px 13px 10px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #3b3b39;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+
+    .section-title svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .section-copy {
+      margin: 4px 0 0 22px;
+      color: var(--text-muted);
+      font-size: 9.5px;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .overview-panel {
+      height: 286px;
+    }
+
+    .overview-body {
+      position: relative;
+      height: 186px;
+      margin: 0 13px;
+      overflow: hidden;
+      border-top: 1px solid #f3f3f1;
+    }
+
+    .chart-grid {
+      position: absolute;
+      inset: 18px 0 13px 38px;
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+    }
+
+    .chart-grid span {
+      border-top: 1px solid #eeeeec;
+    }
+
+    .chart-labels {
+      position: absolute;
+      top: 14px;
+      bottom: 11px;
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: #a0a09d;
+      font-size: 8.5px;
+    }
+
+    .chart-bars {
+      position: absolute;
+      inset: 23px 15px 16px 56px;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(28px, 1fr));
+      align-items: end;
+      gap: 8%;
+    }
+
+    .bar-group {
+      display: flex;
+      height: 100%;
+      align-items: end;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .bar {
+      width: 9px;
+      min-height: 3px;
+      border-radius: 3px 3px 0 0;
+      background: #d7d6ec;
+    }
+
+    .bar.secondary {
+      background: #dededb;
+    }
+
+    .bar-label {
+      position: absolute;
+      bottom: 1px;
+      width: 70px;
+      transform: translateX(-50%);
+      color: #9b9b98;
+      font-size: 8.5px;
+      text-align: center;
+    }
+
+    .overview-foot {
+      display: flex;
+      height: 41px;
+      align-items: center;
+      border-top: 1px solid #f1f1ef;
+      background: #fafafa;
+      padding: 0 13px;
+    }
+
+    .legend {
+      display: inline-flex;
+      align-items: center;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+
+    .legend span {
+      display: inline-flex;
+      height: 24px;
+      align-items: center;
+      gap: 5px;
+      border-right: 1px solid var(--line);
+      padding: 0 9px;
+      color: #5f5f5d;
+      font-size: 9px;
+    }
+
+    .legend span:last-child {
+      border-right: 0;
+    }
+
+    .legend i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #6a66b5;
+    }
+
+    .legend .muted { background: #a8a8a4; }
+
+    .table-panel {
+      min-height: 275px;
+    }
+
+    .table-wrap {
+      margin: 0 13px 13px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead {
+      background: #fafafa;
+    }
+
+    th {
+      height: 33px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 14px;
+      color: #888884;
+      font-size: 9px;
+      font-weight: 520;
+      text-align: left;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #f0f0ee;
+      cursor: pointer;
+      transition: background-color 100ms ease;
+    }
+
+    tbody tr:last-child {
+      border-bottom: 0;
+    }
+
+    tbody tr:hover {
+      background: #fafaf9;
+    }
+
+    td {
+      height: 47px;
+      padding: 0 14px;
+      color: #555552;
+      font-size: 10px;
+      vertical-align: middle;
+    }
+
+    .account-cell {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .service-mark {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      flex: 0 0 27px;
+      place-items: center;
+      border: 1px solid #e2e2df;
+      border-radius: 7px;
+      background: var(--surface);
+      color: #3f3f3d;
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    .account-name {
+      min-width: 0;
+    }
+
+    .account-name strong,
+    .account-name small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .account-name strong {
+      color: #333331;
+      font-size: 10.5px;
+      font-weight: 580;
+    }
+
+    .account-name small {
+      margin-top: 3px;
+      color: #a0a09d;
+      font-size: 8.5px;
+    }
+
+    .category-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      background: #f4f4f2;
+      padding: 4px 8px;
+      color: #696966;
+      font-size: 9px;
+    }
+
+    .category-badge::before {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #8d8d89;
+      content: "";
+    }
+
+    .category-badge[data-category="工作"]::before { background: #5e6db2; }
+    .category-badge[data-category="开发"]::before { background: #9a7048; }
+    .category-badge[data-category="个人"]::before { background: #4f8069; }
+
+    .password-mask {
+      color: #858581;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      letter-spacing: 1.5px;
+    }
+
+    .row-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      opacity: 0.62;
+    }
+
+    tr:hover .row-actions {
+      opacity: 1;
+    }
+
+    .row-action {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: #6b6b68;
+      cursor: pointer;
+    }
+
+    .row-action:hover {
+      border-color: var(--line);
+      background: var(--surface);
+    }
+
+    .row-action svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .empty-state {
+      display: none;
+      height: 142px;
+      place-items: center;
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    dialog {
+      width: 420px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface);
+      padding: 0;
+      color: var(--text);
+      box-shadow: var(--shadow-float);
+    }
+
+    dialog::backdrop {
+      background: rgba(27, 27, 26, 0.26);
+    }
+
+    .dialog-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    .dialog-head h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 630;
+    }
+
+    .dialog-body {
+      display: grid;
+      gap: 13px;
+      padding: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      color: #61615e;
+      font-size: 10px;
+      font-weight: 520;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      outline: none;
+      background: #fcfcfb;
+      padding: 0 10px;
+      color: var(--text);
+      font-size: 11px;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: #8d89c4;
+      box-shadow: 0 0 0 3px var(--brand-soft);
+    }
+
+    .dialog-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      border-top: 1px solid var(--line);
+      padding: 13px 18px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 24px;
+      bottom: 22px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #222;
+      padding: 10px 13px;
+      color: #fff;
+      font-size: 10px;
+      box-shadow: var(--shadow-float);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 150ms ease, transform 150ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-height: 820px) {
+      .overview-panel { height: 238px; }
+      .overview-body { height: 138px; }
+      .metric-card { min-height: 98px; }
+      .metric-value { margin-top: 11px; }
+      .nav-label { margin-top: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 图标使用同一套 1.8px 线性 SVG，避免引入额外图标依赖。 -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l8-8m-3 3 2 2m-5 1 2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19 13.5v-3l-2-.7a7 7 0 0 0-.8-1.8l.9-1.9-2.2-2.2-1.9.9a7 7 0 0 0-1.8-.8L10.5 2h-3l-.7 2a7 7 0 0 0-1.8.8l-1.9-.9L.9 6.1 1.8 8a7 7 0 0 0-.8 1.8l-2 .7v3l2 .7a7 7 0 0 0 .8 1.8l-.9 1.9 2.2 2.2 1.9-.9a7 7 0 0 0 1.8.8l.7 2h3l.7-2a7 7 0 0 0 1.8-.8l1.9.9 2.2-2.2-.9-1.9a7 7 0 0 0 .8-1.8z" transform="translate(3 0) scale(.75)" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.4-2L20 8M4 16l2.5 2a7 7 0 0 0 11.4-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 3v4m10-4v4M3 10h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m8.5 12 2.2 2.2 4.8-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 9h18M8 9v11" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true">
+          <path d="M14 2.5 24.2 7v7.2c0 6.1-4.4 9.6-10.2 11.3C8.2 23.8 3.8 20.3 3.8 14.2V7L14 2.5Z" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M10.2 13.4a3.8 3.8 0 1 1 5.2 3.5v3.2h-2.8v-3.2a3.8 3.8 0 0 1-2.4-3.5Z" fill="currentColor" opacity=".9"/>
+        </svg>
+        <span>Local Vault</span>
+      </div>
+
+      <div class="nav-label">密码库</div>
+      <nav aria-label="密码库导航">
+        <ul class="nav-list">
+          <li><button class="nav-item active" data-filter="全部"><svg class="icon"><use href="#i-grid"/></svg>账号管理<span class="count">24</span></button></li>
+          <li><button class="nav-item" data-filter="全部"><svg class="icon"><use href="#i-key"/></svg>全部账号</button></li>
+          <li><button class="nav-item" data-filter="最近"><svg class="icon"><use href="#i-clock"/></svg>最近使用</button></li>
+          <li><button class="nav-item" data-filter="回收站"><svg class="icon"><use href="#i-trash"/></svg>回收站<span class="count">2</span></button></li>
+        </ul>
+      </nav>
+
+      <div class="nav-label">分类</div>
+      <ul class="nav-list">
+        <li><button class="nav-item" data-filter="工作"><span class="category-dot work"></span>工作<span class="count">8</span></button></li>
+        <li><button class="nav-item" data-filter="开发"><span class="category-dot dev"></span>开发<span class="count">7</span></button></li>
+        <li><button class="nav-item" data-filter="个人"><span class="category-dot personal"></span>个人<span class="count">6</span></button></li>
+        <li><button class="nav-item" data-filter="未分类"><span class="category-dot"></span>未分类<span class="count">3</span></button></li>
+      </ul>
+
+      <div class="sidebar-bottom">
+        <div class="vault-status">
+          <div class="status-ring"><svg><use href="#i-lock"/></svg></div>
+          <div><strong>密码库已锁定保护</strong><span>数据仅保存在这台电脑</span></div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <button class="nav-item"><svg class="icon"><use href="#i-settings"/></svg>设置</button>
+        <div class="profile">
+          <div class="avatar">本机</div>
+          <div><strong>Administrator</strong><span>Windows 设备</span></div>
+          <svg class="icon"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-wrap">
+      <section class="workspace">
+        <header class="topbar">
+          <h1>账号管理</h1>
+          <div class="topbar-actions">
+            <label class="search-box">
+              <svg><use href="#i-search"/></svg>
+              <input id="searchInput" type="search" placeholder="搜索名称、网址或用户名" autocomplete="off" />
+            </label>
+            <button class="icon-button" id="refreshButton" title="刷新"><svg class="button-icon"><use href="#i-refresh"/></svg></button>
+            <button class="primary-button" id="openCreateDialog"><svg class="button-icon"><use href="#i-plus"/></svg>新增账号</button>
+          </div>
+        </header>
+
+        <div class="content-scroll">
+          <section class="metric-grid" aria-label="密码库概览">
+            <article class="metric-card">
+              <div class="metric-title"><svg><use href="#i-key"/></svg>全部账号</div>
+              <div class="metric-value">24 <small>个账号</small></div>
+              <p class="metric-note">最近 7 天新增 3 个账号</p>
+            </article>
+            <article class="metric-card">
+              <div class="metric-title"><svg><use href="#i-grid"/></svg>账号分类</div>
+              <div class="metric-value">4 <small>个分类</small></div>
+              <p class="metric-note">工作分类中的账号最多</p>
+            </article>
+            <article class="metric-card">
+              <div class="metric-title"><svg><use href="#i-shield"/></svg>本地保护</div>
+              <div class="metric-value">AES-256-GCM <span class="status-pill">已启用</span></div>
+              <p class="metric-note">上次自动保存：今天 21:24</p>
+            </article>
+          </section>
+
+          <section class="panel overview-panel">
+            <header class="panel-head">
+              <div>
+                <div class="section-title"><svg><use href="#i-chart"/></svg>使用概览</div>
+                <p class="section-copy">查看最近一周账号的使用情况。</p>
+              </div>
+              <div class="panel-actions">
+                <button class="icon-button" title="刷新"><svg class="button-icon"><use href="#i-refresh"/></svg></button>
+                <button class="secondary-button"><svg class="button-icon"><use href="#i-calendar"/></svg>近 7 天<svg class="button-icon" style="width:12px"><use href="#i-chevron"/></svg></button>
+              </div>
+            </header>
+            <div class="overview-body" aria-label="最近七天账号使用柱状图">
+              <div class="chart-grid"><span></span><span></span><span></span><span></span></div>
+              <div class="chart-labels"><span>12</span><span>8</span><span>4</span><span>0</span></div>
+              <div class="chart-bars">
+                <div class="bar-group"><i class="bar" style="height:35%"></i><i class="bar secondary" style="height:18%"></i><span class="bar-label">周一</span></div>
+                <div class="bar-group"><i class="bar" style="height:56%"></i><i class="bar secondary" style="height:28%"></i><span class="bar-label">周二</span></div>
+                <div class="bar-group"><i class="bar" style="height:42%"></i><i class="bar secondary" style="height:35%"></i><span class="bar-label">周三</span></div>
+                <div class="bar-group"><i class="bar" style="height:70%"></i><i class="bar secondary" style="height:22%"></i><span class="bar-label">周四</span></div>
+                <div class="bar-group"><i class="bar" style="height:61%"></i><i class="bar secondary" style="height:38%"></i><span class="bar-label">周五</span></div>
+                <div class="bar-group"><i class="bar" style="height:29%"></i><i class="bar secondary" style="height:14%"></i><span class="bar-label">周六</span></div>
+                <div class="bar-group"><i class="bar" style="height:48%"></i><i class="bar secondary" style="height:25%"></i><span class="bar-label">今天</span></div>
+              </div>
+            </div>
+            <footer class="overview-foot">
+              <div class="legend"><span><i></i>账号查看</span><span><i class="muted"></i>密码复制</span></div>
+            </footer>
+          </section>
+
+          <section class="panel table-panel">
+            <header class="panel-head">
+              <div>
+                <div class="section-title"><svg><use href="#i-list"/></svg>最近使用</div>
+                <p class="section-copy">快速查看、复制或编辑最近使用的账号。</p>
+              </div>
+              <div class="panel-actions">
+                <button class="secondary-button"><svg class="button-icon"><use href="#i-calendar"/></svg>2026/8/23 - 2026/8/30</button>
+                <button class="secondary-button">查看全部<svg class="button-icon"><use href="#i-chevron"/></svg></button>
+              </div>
+            </header>
+            <div class="table-wrap">
+              <table id="accountTable">
+                <thead>
+                  <tr>
+                    <th style="width:31%">账号</th>
+                    <th style="width:21%">用户名</th>
+                    <th style="width:14%">分类</th>
+                    <th style="width:15%">密码</th>
+                    <th style="width:12%">最近使用</th>
+                    <th style="width:7%; text-align:right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr data-category="开发" data-search="github github.com chen.dev 开发">
+                    <td><div class="account-cell"><span class="service-mark">GH</span><span class="account-name"><strong>GitHub</strong><small>github.com</small></span></div></td>
+                    <td>chen.dev@example.com</td><td><span class="category-badge" data-category="开发">开发</span></td><td><span class="password-mask">••••••••••••</span></td><td>2 分钟前</td>
+                    <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
+                  </tr>
+                  <tr data-category="工作" data-search="google workspace accounts.google.com chen.company 工作">
+                    <td><div class="account-cell"><span class="service-mark">G</span><span class="account-name"><strong>Google Workspace</strong><small>accounts.google.com</small></span></div></td>
+                    <td>chen.company@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>今天 18:42</td>
+                    <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
+                  </tr>
+                  <tr data-category="工作" data-search="figma figma.com designer 工作">
+                    <td><div class="account-cell"><span class="service-mark">F</span><span class="account-name"><strong>Figma</strong><small>figma.com</small></span></div></td>
+                    <td>designer@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>昨天 22:16</td>
+                    <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
+                  </tr>
+                  <tr data-category="个人" data-search="notion notion.so personal 个人">
+                    <td><div class="account-cell"><span class="service-mark">N</span><span class="account-name"><strong>Notion</strong><small>notion.so</small></span></div></td>
+                    <td>personal@example.com</td><td><span class="category-badge" data-category="个人">个人</span></td><td><span class="password-mask">••••••••••••</span></td><td>8 月 27 日</td>
+                    <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="empty-state" id="emptyState">没有找到匹配的账号</div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="createDialog">
+    <form method="dialog" id="createForm">
+      <header class="dialog-head">
+        <h2>新增账号</h2>
+        <button class="icon-button" value="cancel" title="关闭"><svg class="button-icon"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <div class="field"><label for="serviceName">名称</label><input id="serviceName" placeholder="例如：GitHub" required /></div>
+        <div class="field"><label for="accountName">用户名</label><input id="accountName" placeholder="邮箱或用户名" required /></div>
+        <div class="field"><label for="accountPassword">密码</label><input id="accountPassword" type="password" placeholder="输入密码" required /></div>
+        <div class="field"><label for="accountCategory">分类</label><select id="accountCategory"><option>工作</option><option>开发</option><option>个人</option><option>未分类</option></select></div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="secondary-button" value="cancel">取消</button>
+        <button class="primary-button" value="default">保存账号</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"><svg class="button-icon"><use href="#i-shield"/></svg><span>操作完成</span></div>
+
+  <script>
+    const searchInput = document.querySelector('#searchInput');
+    const rows = [...document.querySelectorAll('#accountTable tbody tr')];
+    const emptyState = document.querySelector('#emptyState');
+    const table = document.querySelector('#accountTable');
+    const toast = document.querySelector('#toast');
+    const dialog = document.querySelector('#createDialog');
+    let activeFilter = '全部';
+
+    // 原型只做界面行为演示，不会读取或保存真实密码。
+    function applyFilter() {
+      const query = searchInput.value.trim().toLowerCase();
+      let visibleCount = 0;
+      rows.forEach((row) => {
+        const matchesQuery = row.dataset.search.toLowerCase().includes(query);
+        const matchesCategory = activeFilter === '全部' || activeFilter === '最近' || row.dataset.category === activeFilter;
+        const visible = matchesQuery && matchesCategory && activeFilter !== '回收站';
+        row.hidden = !visible;
+        if (visible) visibleCount += 1;
+      });
+      table.style.display = visibleCount ? 'table' : 'none';
+      emptyState.style.display = visibleCount ? 'none' : 'grid';
+    }
+
+    function showToast(message) {
+      toast.querySelector('span').textContent = message;
+      toast.classList.add('show');
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 1600);
+    }
+
+    searchInput.addEventListener('input', applyFilter);
+
+    document.querySelectorAll('.nav-item[data-filter]').forEach((item) => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item[data-filter]').forEach((nav) => nav.classList.remove('active'));
+        item.classList.add('active');
+        activeFilter = item.dataset.filter;
+        applyFilter();
+      });
+    });
+
+    document.querySelector('#openCreateDialog').addEventListener('click', () => dialog.showModal());
+    document.querySelector('#refreshButton').addEventListener('click', () => showToast('账号列表已刷新'));
+
+    document.querySelector('#createForm').addEventListener('submit', (event) => {
+      if (event.submitter?.value !== 'default') return;
+      event.preventDefault();
+      if (!event.currentTarget.reportValidity()) return;
+      dialog.close();
+      event.currentTarget.reset();
+      showToast('原型演示：账号已保存');
+    });
+
+    document.querySelectorAll('.copy-action').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        showToast('原型演示：密码已复制');
+      });
+    });
+
+    document.querySelectorAll('.reveal-action').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const mask = button.closest('tr').querySelector('.password-mask');
+        mask.textContent = mask.textContent.includes('•') ? 'Demo-p@ss-26' : '••••••••••••';
+      });
+    });
+  </script>
+</body>
+</html>
