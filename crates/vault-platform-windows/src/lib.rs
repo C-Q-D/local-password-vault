@@ -4,3 +4,6 @@ pub mod atomic_file;
 pub mod clipboard;
 pub mod dpapi;
 pub mod process_lock;
+
+#[cfg(test)]
+mod integration_tests;

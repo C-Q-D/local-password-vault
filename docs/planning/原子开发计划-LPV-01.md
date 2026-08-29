@@ -37,8 +37,8 @@
 | 2 | LPV-01-02 加密和认证空密码库信封 | LPV-01-01 | L3 | done |
 | 3 | LPV-01-03 使用 DPAPI 保护数据密钥 | LPV-01-02 | L3 | done |
 | 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | done |
-| 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | in_progress |
-| 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | pending |
+| 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | done |
+| 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | in_progress |
 | 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | pending |
 | 8 | LPV-01-08 按参考图实现整体主界面 | LPV-01-07、项目所有者参考图 | L1 | pending |
 
@@ -136,7 +136,7 @@
 
 ## LPV-01-05 初始化或加载空密码库
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：首次启动创建空库，第二次启动解密加载同一空库。
 - 唯一目标：`vault-storage` 用一个存储入口在 main 不存在时初始化空库，在 main 存在时认证加载。
 - 当前行为与目标行为：信封与平台接口彼此独立；完成后形成 `open_or_initialize` 用例。
@@ -159,7 +159,7 @@
 
 ## LPV-01-06 持有 Windows 单实例锁
 
-- 状态：pending
+- 状态：in_progress
 - 支持的验收场景：第二实例不会同时读取或写入同一密码库。
 - 唯一目标：Windows 平台在指定数据目录获取并持有 `vault.lock` 独占锁，直到 guard 释放。
 - 当前行为与目标行为：`process_lock.rs` 只有模块说明；完成后同目录第二次获取明确返回 Busy。
@@ -274,3 +274,11 @@
 - DDD 记录：反证提出同用户恶意进程抢换 temp，按产品轻量边界判定越出范围并写明威胁边界；其无界读取反例被吸收为句柄限量读取。按修订范围复核最终为 PASS。
 - 验证证据：Windows 平台 crate 8 项测试、storage 5 项回归、目标 check、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
 - 范围确认：仅使用 `tempfile` 隔离目录；未实现后续替换、backup、正式用户目录、Tauri 或前端。
+
+### LPV-01-05
+
+- 完成结果：实现 `open_or_initialize`，已有 main 只认证加载；只有 `NotFound` 才生成加密空库并首次发布；返回已确认文档和是否由本次初始化的状态。
+- 状态证据：发布成功和 `AlreadyExists` 都重新读取并认证磁盘 main；损坏 main、读取、密钥保护、认证或发布失败均不返回内存候选，也不覆盖为新空库。
+- DDD 记录：实现前声明 PASS；真实代码和测试完成后再次复核为 PASS。
+- 验证证据：storage 8 项测试、Windows 平台 9 项测试（含 tempfile + 真实 DPAPI + AES-GCM + 文件重开链路）、目标 checks、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
+- 范围确认：未实现后续替换、backup、锁、Tauri、前端或分类账号操作。

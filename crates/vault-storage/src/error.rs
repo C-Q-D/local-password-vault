@@ -76,3 +76,12 @@ pub enum VaultFileError {
     #[error("密码库文件操作失败")]
     Io,
 }
+
+/// 初始化或加载主密码库时返回的安全错误类别。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum VaultOpenError {
+    #[error("密码库文件不可用：{0}")]
+    File(VaultFileError),
+    #[error("密码库内容不可用：{0}")]
+    Envelope(EnvelopeError),
+}

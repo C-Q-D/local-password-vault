@@ -3,9 +3,11 @@
 mod envelope;
 mod error;
 mod file_access;
+mod initialization;
 mod key_protection;
 
 pub use envelope::{MAX_ENVELOPE_SIZE, open, seal};
-pub use error::{EnvelopeError, KeyProtectionError, VaultFileError};
+pub use error::{EnvelopeError, KeyProtectionError, VaultFileError, VaultOpenError};
 pub use file_access::VaultFiles;
+pub use initialization::{OpenedVault, open_or_initialize};
 pub use key_protection::{DataKey, KeyProtector};
