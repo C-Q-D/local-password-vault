@@ -55,6 +55,29 @@ impl VaultDocument {
         Ok(category)
     }
 
+    /// 按稳定 ID 重命名一个用户分类，失败时不修改候选文档。
+    pub fn rename_category(&mut self, id: Uuid, name: &str) -> Result<(), CategoryError> {
+        let display_name = name.trim();
+        if display_name.is_empty() {
+            return Err(CategoryError::BlankName);
+        }
+
+        let target_index = self
+            .categories
+            .iter()
+            .position(|category| category.id == id)
+            .ok_or(CategoryError::NotFound)?;
+        let normalized_name = normalize_category_name(display_name);
+        if self.categories.iter().enumerate().any(|(index, category)| {
+            index != target_index && normalize_category_name(&category.name) == normalized_name
+        }) {
+            return Err(CategoryError::DuplicateName);
+        }
+
+        self.categories[target_index].name = display_name.to_owned();
+        Ok(())
+    }
+
     /// 校验载入和保存共同依赖的领域不变量。
     ///
     /// 校验集中在这里，避免不同读写路径对损坏数据作出不一致判断。
@@ -185,6 +208,44 @@ mod tests {
         let confirmed = document.clone();
         assert_eq!(
             document.create_category(" development "),
+            Err(CategoryError::DuplicateName)
+        );
+        assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn rename_category_updates_only_the_target_by_id() {
+        let mut document = VaultDocument::empty();
+        let target = document.create_category("工作").expect("分类应创建成功");
+        let untouched = document.create_category("个人").expect("分类应创建成功");
+
+        document
+            .rename_category(target.id, "  开发  ")
+            .expect("目标分类应重命名成功");
+
+        assert_eq!(document.categories[0].name, "开发");
+        assert_eq!(document.categories[1], untouched);
+    }
+
+    #[test]
+    fn rename_category_errors_do_not_mutate_the_document() {
+        let mut document = VaultDocument::empty();
+        let target = document.create_category("工作").expect("分类应创建成功");
+        document.create_category("个人").expect("分类应创建成功");
+        let confirmed = document.clone();
+
+        assert_eq!(
+            document.rename_category(Uuid::new_v4(), "其他"),
+            Err(CategoryError::NotFound)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.rename_category(target.id, "  "),
+            Err(CategoryError::BlankName)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.rename_category(target.id, " 个人 "),
             Err(CategoryError::DuplicateName)
         );
         assert_eq!(document, confirmed);

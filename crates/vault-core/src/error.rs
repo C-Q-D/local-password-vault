@@ -26,6 +26,8 @@ pub enum VaultValidationError {
 /// 分类写操作返回的稳定业务错误，不携带用户输入内容。
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 pub enum CategoryError {
+    #[error("分类不存在")]
+    NotFound,
     #[error("分类名称不能为空")]
     BlankName,
     #[error("分类名称已经存在")]

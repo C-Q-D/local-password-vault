@@ -33,6 +33,7 @@ pub trait VaultRepository: Send + Sync {
 /// 分类用例向 Tauri 暴露的稳定错误，不携带用户输入或本地路径。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VaultApplicationError {
+    CategoryNotFound,
     CategoryNameEmpty,
     CategoryNameDuplicate,
     VaultSaveFailed,
@@ -106,6 +107,7 @@ impl VaultApplication {
 
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
     match error {
+        CategoryError::NotFound => VaultApplicationError::CategoryNotFound,
         CategoryError::BlankName => VaultApplicationError::CategoryNameEmpty,
         CategoryError::DuplicateName => VaultApplicationError::CategoryNameDuplicate,
     }
