@@ -123,6 +123,17 @@ pub(crate) fn rename_category(
         .map_err(CommandErrorDto::from)
 }
 
+#[tauri::command]
+pub(crate) fn delete_category(
+    id: String,
+    application: State<'_, VaultApplication>,
+) -> Result<VaultStatusDto, CommandErrorDto> {
+    application
+        .delete_category(&id)
+        .map(VaultStatusDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

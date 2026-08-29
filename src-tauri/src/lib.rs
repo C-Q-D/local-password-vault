@@ -11,7 +11,8 @@ pub fn run() {
             commands::experiment::check_stack,
             commands::vault::load_vault,
             commands::vault::create_category,
-            commands::vault::rename_category
+            commands::vault::rename_category,
+            commands::vault::delete_category
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 应用启动失败");

@@ -134,6 +134,31 @@ impl VaultApplication {
         state.document = confirmed;
         Ok(snapshot_from(&state))
     }
+
+    /// 删除空分类并持久化；核心层会在紧邻写入前重新检查账号引用。
+    pub fn delete_category(&self, id: &str) -> Result<VaultSnapshot, VaultApplicationError> {
+        let category_id =
+            Uuid::parse_str(id).map_err(|_| VaultApplicationError::CategoryNotFound)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let mut candidate = state.document.clone();
+        candidate
+            .delete_category(category_id)
+            .map_err(map_category_error)?;
+        candidate.revision = candidate
+            .revision
+            .checked_add(1)
+            .ok_or(VaultApplicationError::VaultSaveFailed)?;
+
+        let confirmed = self
+            .repository
+            .save_confirmed(&candidate)
+            .map_err(|_| VaultApplicationError::VaultSaveFailed)?;
+        state.document = confirmed;
+        Ok(snapshot_from(&state))
+    }
 }
 
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
@@ -185,6 +210,7 @@ mod tests {
         atomic::{AtomicBool, AtomicUsize, Ordering},
     };
 
+    use vault_core::Account;
     use vault_storage::{VaultFileError, VaultOpenError};
 
     use super::*;
@@ -351,5 +377,60 @@ mod tests {
 
         assert_eq!(application.snapshot().expect("快照应可读取"), before);
         assert_eq!(save_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn delete_category_publishes_once_and_removes_target() {
+        let (application, _, save_count) = application(false);
+        let created = application.create_category("工作").expect("分类应创建成功");
+
+        let deleted = application
+            .delete_category(&created.categories[0].id)
+            .expect("空分类应删除成功");
+
+        assert_eq!(deleted.revision, 2);
+        assert!(deleted.categories.is_empty());
+        assert_eq!(save_count.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn delete_save_failure_keeps_previous_confirmed_snapshot() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let (application, _, save_count) = application_with_document(true, document);
+        let before = application.snapshot().expect("快照应可读取");
+
+        assert_eq!(
+            application.delete_category(&category.id.to_string()),
+            Err(VaultApplicationError::VaultSaveFailed)
+        );
+
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn delete_non_empty_category_is_rejected_before_save() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        document.accounts.push(Account {
+            id: Uuid::new_v4(),
+            category_id: Some(category.id),
+            username: "测试账号".to_owned(),
+            password: "仅用于隔离测试".to_owned(),
+            address: None,
+            email: None,
+            notes: None,
+        });
+        let (application, _, save_count) = application_with_document(false, document);
+        let before = application.snapshot().expect("快照应可读取");
+
+        assert_eq!(
+            application.delete_category(&category.id.to_string()),
+            Err(VaultApplicationError::CategoryNotEmpty)
+        );
+
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 0);
     }
 }

@@ -36,3 +36,8 @@ export function createCategory(name: string): Promise<VaultStatus> {
 export function renameCategory(id: string, name: string): Promise<VaultStatus> {
   return invoke<VaultStatus>("rename_category", { id, name });
 }
+
+/** 删除只提交分类 ID；是否为空由 Rust 在持久化前重新判断。 */
+export function deleteCategory(id: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("delete_category", { id });
+}
