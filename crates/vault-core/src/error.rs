@@ -35,3 +35,14 @@ pub enum CategoryError {
     #[error("分类名称已经存在")]
     DuplicateName,
 }
+
+/// 新增账号返回的稳定业务错误，不携带任何账号字段内容。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum AccountError {
+    #[error("账号名不能为空")]
+    UsernameRequired,
+    #[error("密码不能为空")]
+    PasswordRequired,
+    #[error("账号分类不存在")]
+    CategoryNotFound,
+}

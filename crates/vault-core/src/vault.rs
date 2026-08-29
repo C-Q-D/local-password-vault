@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{CategoryError, VaultValidationError};
+use crate::{AccountError, CategoryError, VaultValidationError};
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -97,6 +97,36 @@ impl VaultDocument {
         Ok(())
     }
 
+    /// 创建一条独立账号；只校验当前产品要求的必填字段和分类引用。
+    pub fn create_account(&mut self, input: CreateAccount) -> Result<Account, AccountError> {
+        if input.username.trim().is_empty() {
+            return Err(AccountError::UsernameRequired);
+        }
+        if input.password.trim().is_empty() {
+            return Err(AccountError::PasswordRequired);
+        }
+        if input.category_id.is_some_and(|category_id| {
+            !self
+                .categories
+                .iter()
+                .any(|category| category.id == category_id)
+        }) {
+            return Err(AccountError::CategoryNotFound);
+        }
+
+        let account = Account {
+            id: Uuid::new_v4(),
+            category_id: input.category_id,
+            username: input.username,
+            password: input.password,
+            address: input.address,
+            email: input.email,
+            notes: input.notes,
+        };
+        self.accounts.push(account.clone());
+        Ok(account)
+    }
+
     /// 校验载入和保存共同依赖的领域不变量。
     ///
     /// 校验集中在这里，避免不同读写路径对损坏数据作出不一致判断。
@@ -163,6 +193,17 @@ pub struct Category {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Account {
     pub id: Uuid,
+    pub category_id: Option<Uuid>,
+    pub username: String,
+    pub password: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// 新增账号所需的领域输入；由调用方决定空的可选字段使用 None 还是空字符串。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateAccount {
     pub category_id: Option<Uuid>,
     pub username: String,
     pub password: String,
@@ -389,6 +430,70 @@ mod tests {
             document.validate(),
             Err(VaultValidationError::BlankPassword)
         );
+    }
+
+    #[test]
+    fn account_creation_accepts_complete_and_minimal_independent_records() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let address = "https://example.invalid".to_owned();
+
+        let complete = document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "  GitHub 工作账号  ".to_owned(),
+                password: "  保留首尾空格的密码  ".to_owned(),
+                address: Some(address.clone()),
+                email: Some("person@example.invalid".to_owned()),
+                notes: Some("测试备注".to_owned()),
+            })
+            .expect("完整账号应创建成功");
+        let minimal = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "另一个账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: Some(address),
+                email: None,
+                notes: None,
+            })
+            .expect("最小账号应创建成功");
+
+        assert_ne!(complete.id, minimal.id);
+        assert_eq!(complete.username, "  GitHub 工作账号  ");
+        assert_eq!(complete.password, "  保留首尾空格的密码  ");
+        assert_eq!(document.accounts, vec![complete, minimal]);
+        assert_eq!(document.validate(), Ok(()));
+    }
+
+    #[test]
+    fn account_creation_rejects_invalid_input_without_mutation() {
+        let mut document = VaultDocument::empty();
+        let confirmed = document.clone();
+        let input = |username: &str, password: &str, category_id| CreateAccount {
+            category_id,
+            username: username.to_owned(),
+            password: password.to_owned(),
+            address: None,
+            email: None,
+            notes: None,
+        };
+
+        assert_eq!(
+            document.create_account(input("  ", "密码", None)),
+            Err(AccountError::UsernameRequired)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.create_account(input("账号", "\n\t", None)),
+            Err(AccountError::PasswordRequired)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.create_account(input("账号", "密码", Some(Uuid::new_v4()))),
+            Err(AccountError::CategoryNotFound)
+        );
+        assert_eq!(document, confirmed);
     }
 
     #[test]
