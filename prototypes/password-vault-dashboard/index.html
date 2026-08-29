@@ -401,14 +401,36 @@
       background: #f8f8f6;
     }
 
-    .date-range-button {
-      min-width: 196px;
-      flex-shrink: 0;
-      justify-content: flex-start;
-      gap: 9px;
-      padding: 0 13px;
+    .sort-control {
+      display: inline-flex;
+      height: 34px;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 0 9px 0 11px;
       color: #62625f;
-      white-space: nowrap;
+    }
+
+    .sort-control:hover {
+      border-color: #d2d2ce;
+      background: #f8f8f6;
+    }
+
+    .sort-control svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+    }
+
+    .sort-control select {
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 10.5px;
+      cursor: pointer;
     }
 
     .primary-button {
@@ -434,6 +456,10 @@
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 11px;
+    }
+
+    .dashboard-only[hidden] {
+      display: none;
     }
 
     .metric-card {
@@ -1132,8 +1158,6 @@
       <nav aria-label="密码库导航">
         <ul class="nav-list">
           <li><button class="nav-item active" data-filter="全部"><svg class="icon"><use href="#i-grid"/></svg>账号管理<span class="count" id="sidebarAccountCount">24</span></button></li>
-          <li><button class="nav-item" data-filter="全部"><svg class="icon"><use href="#i-key"/></svg>全部账号</button></li>
-          <li><button class="nav-item" data-filter="最近"><svg class="icon"><use href="#i-clock"/></svg>最近使用</button></li>
         </ul>
       </nav>
 
@@ -1172,7 +1196,7 @@
         </header>
 
         <div class="content-scroll">
-          <section class="metric-grid" aria-label="密码库概览">
+          <section class="metric-grid dashboard-only" aria-label="密码库概览">
             <article class="metric-card">
               <div class="metric-title"><svg><use href="#i-key"/></svg>全部账号</div>
               <div class="metric-value"><span id="accountMetricValue">24</span> <small>个账号</small></div>
@@ -1190,7 +1214,7 @@
             </article>
           </section>
 
-          <section class="panel overview-panel">
+          <section class="panel overview-panel dashboard-only">
             <header class="panel-head">
               <div>
                 <div class="section-title"><svg><use href="#i-chart"/></svg>使用概览</div>
@@ -1222,12 +1246,17 @@
           <section class="panel table-panel">
             <header class="panel-head">
               <div>
-                <div class="section-title"><svg><use href="#i-list"/></svg>最近使用</div>
-                <p class="section-copy">快速查看、复制或编辑最近使用的账号。</p>
+                <div class="section-title"><svg><use href="#i-list"/></svg>全部账号</div>
+                <p class="section-copy">查看、复制或编辑账号，默认按最近使用时间排列。</p>
               </div>
               <div class="panel-actions">
-                <button class="secondary-button date-range-button"><svg class="button-icon"><use href="#i-calendar"/></svg>2026 / 8 / 23 — 2026 / 8 / 30</button>
-                <button class="secondary-button">查看全部<svg class="button-icon"><use href="#i-chevron"/></svg></button>
+                <label class="sort-control" for="accountSort">
+                  <svg><use href="#i-clock"/></svg>
+                  <select id="accountSort" aria-label="账号排序">
+                    <option value="recent">最近使用优先</option>
+                    <option value="oldest">最早使用优先</option>
+                  </select>
+                </label>
               </div>
             </header>
             <div class="table-wrap">
@@ -1243,22 +1272,22 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr data-account-name="GitHub" data-password="Gh-demo-2026!" data-address="https://github.com" data-email="chen.dev@example.com" data-notes="个人代码仓库与项目协作" data-category="开发">
+                  <tr data-account-name="GitHub" data-password="Gh-demo-2026!" data-address="https://github.com" data-email="chen.dev@example.com" data-notes="个人代码仓库与项目协作" data-category="开发" data-last-used="2026-08-30T21:27:00">
                     <td><div class="account-cell"><span class="service-mark">GH</span><span class="account-name"><strong>GitHub</strong><small>github.com</small></span></div></td>
                     <td>chen.dev@example.com</td><td><span class="category-badge" data-category="开发">开发</span></td><td><span class="password-mask">••••••••••••</span></td><td>2 分钟前</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-account-name="Google Workspace" data-password="Google-demo-2026!" data-address="https://accounts.google.com" data-email="chen.company@example.com" data-notes="工作邮箱与文档" data-category="工作">
+                  <tr data-account-name="Google Workspace" data-password="Google-demo-2026!" data-address="https://accounts.google.com" data-email="chen.company@example.com" data-notes="工作邮箱与文档" data-category="工作" data-last-used="2026-08-30T18:42:00">
                     <td><div class="account-cell"><span class="service-mark">G</span><span class="account-name"><strong>Google Workspace</strong><small>accounts.google.com</small></span></div></td>
                     <td>chen.company@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>今天 18:42</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-account-name="Figma" data-password="Figma-demo-2026!" data-address="https://figma.com" data-email="designer@example.com" data-notes="产品原型与设计稿" data-category="工作">
+                  <tr data-account-name="Figma" data-password="Figma-demo-2026!" data-address="https://figma.com" data-email="designer@example.com" data-notes="产品原型与设计稿" data-category="工作" data-last-used="2026-08-29T22:16:00">
                     <td><div class="account-cell"><span class="service-mark">F</span><span class="account-name"><strong>Figma</strong><small>figma.com</small></span></div></td>
                     <td>designer@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>昨天 22:16</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-account-name="Notion" data-password="Notion-demo-2026!" data-address="https://notion.so" data-email="personal@example.com" data-notes="个人知识库" data-category="个人">
+                  <tr data-account-name="Notion" data-password="Notion-demo-2026!" data-address="https://notion.so" data-email="personal@example.com" data-notes="个人知识库" data-category="个人" data-last-used="2026-08-27T12:00:00">
                     <td><div class="account-cell"><span class="service-mark">N</span><span class="account-name"><strong>Notion</strong><small>notion.so</small></span></div></td>
                     <td>personal@example.com</td><td><span class="category-badge" data-category="个人">个人</span></td><td><span class="password-mask">••••••••••••</span></td><td>8 月 27 日</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
@@ -1368,6 +1397,9 @@
     let rows = [...document.querySelectorAll('#accountTable tbody tr')];
     const emptyState = document.querySelector('#emptyState');
     const table = document.querySelector('#accountTable');
+    const accountTableBody = table.querySelector('tbody');
+    const accountSort = document.querySelector('#accountSort');
+    const dashboardSections = [...document.querySelectorAll('.dashboard-only')];
     const toast = document.querySelector('#toast');
     const accountDialog = document.querySelector('#createDialog');
     const createForm = document.querySelector('#createForm');
@@ -1415,7 +1447,18 @@
       ].join(' ').toLocaleLowerCase('zh-CN');
     }
 
+    function sortAccountRows() {
+      const direction = accountSort.value === 'oldest' ? 1 : -1;
+      rows.sort((left, right) => {
+        const leftTime = Date.parse(left.dataset.lastUsed);
+        const rightTime = Date.parse(right.dataset.lastUsed);
+        return (leftTime - rightTime) * direction;
+      });
+      rows.forEach((row) => accountTableBody.append(row));
+    }
+
     function applyFilter() {
+      sortAccountRows();
       const query = searchInput.value.trim().toLocaleLowerCase('zh-CN');
       let visibleCount = 0;
       rows.forEach((row) => {
@@ -1441,6 +1484,10 @@
       document.querySelectorAll('.nav-item[data-filter]').forEach((nav) => nav.classList.remove('active'));
       item.classList.add('active');
       activeFilter = item.dataset.filter;
+      const isCategoryView = item.classList.contains('category-item');
+      dashboardSections.forEach((section) => {
+        section.hidden = isCategoryView;
+      });
       applyFilter();
     }
 
@@ -1608,6 +1655,7 @@
     }
 
     searchInput.addEventListener('input', applyFilter);
+    accountSort.addEventListener('change', applyFilter);
     searchInput.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !searchInput.value) return;
       searchInput.value = '';
