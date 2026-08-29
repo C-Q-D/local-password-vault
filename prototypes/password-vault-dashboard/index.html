@@ -994,6 +994,20 @@
       padding: 13px 18px;
     }
 
+    .account-dialog-foot {
+      justify-content: space-between;
+    }
+
+    .account-dialog-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    #deleteAccountButton[hidden] {
+      display: none;
+    }
+
     .danger-button {
       display: inline-flex;
       height: 34px;
@@ -1083,7 +1097,7 @@
       <div class="nav-label">密码库</div>
       <nav aria-label="密码库导航">
         <ul class="nav-list">
-          <li><button class="nav-item active" data-filter="全部"><svg class="icon"><use href="#i-grid"/></svg>账号管理<span class="count">24</span></button></li>
+          <li><button class="nav-item active" data-filter="全部"><svg class="icon"><use href="#i-grid"/></svg>账号管理<span class="count" id="sidebarAccountCount">24</span></button></li>
           <li><button class="nav-item" data-filter="全部"><svg class="icon"><use href="#i-key"/></svg>全部账号</button></li>
           <li><button class="nav-item" data-filter="最近"><svg class="icon"><use href="#i-clock"/></svg>最近使用</button></li>
         </ul>
@@ -1126,7 +1140,7 @@
           <section class="metric-grid" aria-label="密码库概览">
             <article class="metric-card">
               <div class="metric-title"><svg><use href="#i-key"/></svg>全部账号</div>
-              <div class="metric-value">24 <small>个账号</small></div>
+              <div class="metric-value"><span id="accountMetricValue">24</span> <small>个账号</small></div>
               <p class="metric-note">最近 7 天新增 3 个账号</p>
             </article>
             <article class="metric-card">
@@ -1194,22 +1208,22 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr data-category="开发" data-search="github github.com chen.dev 开发">
+                  <tr data-account-name="GitHub" data-password="Gh-demo-2026!" data-address="https://github.com" data-email="chen.dev@example.com" data-notes="个人代码仓库与项目协作" data-category="开发" data-search="github github.com chen.dev@example.com 个人代码仓库与项目协作 开发">
                     <td><div class="account-cell"><span class="service-mark">GH</span><span class="account-name"><strong>GitHub</strong><small>github.com</small></span></div></td>
                     <td>chen.dev@example.com</td><td><span class="category-badge" data-category="开发">开发</span></td><td><span class="password-mask">••••••••••••</span></td><td>2 分钟前</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-category="工作" data-search="google workspace accounts.google.com chen.company 工作">
+                  <tr data-account-name="Google Workspace" data-password="Google-demo-2026!" data-address="https://accounts.google.com" data-email="chen.company@example.com" data-notes="工作邮箱与文档" data-category="工作" data-search="google workspace accounts.google.com chen.company@example.com 工作邮箱与文档 工作">
                     <td><div class="account-cell"><span class="service-mark">G</span><span class="account-name"><strong>Google Workspace</strong><small>accounts.google.com</small></span></div></td>
                     <td>chen.company@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>今天 18:42</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-category="工作" data-search="figma figma.com designer 工作">
+                  <tr data-account-name="Figma" data-password="Figma-demo-2026!" data-address="https://figma.com" data-email="designer@example.com" data-notes="产品原型与设计稿" data-category="工作" data-search="figma figma.com designer@example.com 产品原型与设计稿 工作">
                     <td><div class="account-cell"><span class="service-mark">F</span><span class="account-name"><strong>Figma</strong><small>figma.com</small></span></div></td>
                     <td>designer@example.com</td><td><span class="category-badge" data-category="工作">工作</span></td><td><span class="password-mask">••••••••••••</span></td><td>昨天 22:16</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
                   </tr>
-                  <tr data-category="个人" data-search="notion notion.so personal 个人">
+                  <tr data-account-name="Notion" data-password="Notion-demo-2026!" data-address="https://notion.so" data-email="personal@example.com" data-notes="个人知识库" data-category="个人" data-search="notion notion.so personal@example.com 个人知识库 个人">
                     <td><div class="account-cell"><span class="service-mark">N</span><span class="account-name"><strong>Notion</strong><small>notion.so</small></span></div></td>
                     <td>personal@example.com</td><td><span class="category-badge" data-category="个人">个人</span></td><td><span class="password-mask">••••••••••••</span></td><td>8 月 27 日</td>
                     <td><div class="row-actions"><button class="row-action copy-action" title="复制密码"><svg><use href="#i-copy"/></svg></button><button class="row-action reveal-action" title="显示密码"><svg><use href="#i-eye"/></svg></button></div></td>
@@ -1227,7 +1241,7 @@
   <dialog id="createDialog">
     <form id="createForm" autocomplete="off">
       <header class="dialog-head">
-        <h2>新增账号</h2>
+        <h2 id="accountDialogTitle">新增账号</h2>
         <button class="icon-button" type="button" id="closeCreateDialog" title="关闭"><svg class="button-icon"><use href="#i-close"/></svg></button>
       </header>
       <div class="dialog-body">
@@ -1244,11 +1258,30 @@
         <div class="field"><label for="accountNotes">备注</label><textarea id="accountNotes" placeholder="记录用途或其他说明"></textarea></div>
         <div class="field"><label for="accountCategory">分类</label><select id="accountCategory"><option>工作</option><option>开发</option><option>个人</option><option>未分类</option></select></div>
       </div>
-      <footer class="dialog-foot">
-        <button class="secondary-button" type="button" id="cancelCreateDialog">取消</button>
-        <button class="primary-button" type="submit">保存账号</button>
+      <footer class="dialog-foot account-dialog-foot">
+        <button class="danger-button" type="button" id="deleteAccountButton" hidden>删除账号</button>
+        <div class="account-dialog-actions">
+          <button class="secondary-button" type="button" id="cancelCreateDialog">取消</button>
+          <button class="primary-button" type="submit" id="saveAccountButton">保存账号</button>
+        </div>
       </footer>
     </form>
+  </dialog>
+
+  <dialog class="compact-dialog" id="deleteAccountDialog">
+    <div>
+      <header class="dialog-head">
+        <h2>删除账号</h2>
+        <button class="icon-button" type="button" id="closeDeleteAccountDialog" title="关闭"><svg class="button-icon"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <p class="dialog-copy">确定删除账号“<strong id="deleteAccountName"></strong>”吗？删除后无法撤销。</p>
+      </div>
+      <footer class="dialog-foot">
+        <button class="secondary-button" type="button" id="cancelDeleteAccount">取消</button>
+        <button class="danger-button" type="button" id="confirmDeleteAccount">删除账号</button>
+      </footer>
+    </div>
   </dialog>
 
   <div class="category-context-menu" id="categoryContextMenu" role="menu" hidden>
@@ -1296,15 +1329,26 @@
 
   <script>
     const searchInput = document.querySelector('#searchInput');
-    const rows = [...document.querySelectorAll('#accountTable tbody tr')];
+    let rows = [...document.querySelectorAll('#accountTable tbody tr')];
     const emptyState = document.querySelector('#emptyState');
     const table = document.querySelector('#accountTable');
     const toast = document.querySelector('#toast');
     const accountDialog = document.querySelector('#createDialog');
     const createForm = document.querySelector('#createForm');
+    const accountDialogTitle = document.querySelector('#accountDialogTitle');
+    const saveAccountButton = document.querySelector('#saveAccountButton');
+    const deleteAccountButton = document.querySelector('#deleteAccountButton');
     const serviceNameInput = document.querySelector('#serviceName');
     const accountPasswordInput = document.querySelector('#accountPassword');
+    const accountAddressInput = document.querySelector('#accountAddress');
+    const accountEmailInput = document.querySelector('#accountEmail');
+    const accountNotesInput = document.querySelector('#accountNotes');
+    const accountCategoryInput = document.querySelector('#accountCategory');
     const toggleAccountPassword = document.querySelector('#toggleAccountPassword');
+    const deleteAccountDialog = document.querySelector('#deleteAccountDialog');
+    const deleteAccountName = document.querySelector('#deleteAccountName');
+    const accountMetricValue = document.querySelector('#accountMetricValue');
+    const sidebarAccountCount = document.querySelector('#sidebarAccountCount');
     const categoryList = document.querySelector('#categoryList');
     const categoryMetricValue = document.querySelector('#categoryMetricValue');
     const categoryContextMenu = document.querySelector('#categoryContextMenu');
@@ -1321,6 +1365,9 @@
     let editingCategoryItem = null;
     let contextCategoryItem = null;
     let pendingDeleteCategoryItem = null;
+    let accountDialogMode = 'create';
+    let editingAccountRow = null;
+    let pendingDeleteAccountRow = null;
 
     // 原型只做界面行为演示，不会读取或保存真实密码。
     function applyFilter() {
@@ -1365,6 +1412,23 @@
 
     function getCategoryCount(item) {
       return Number.parseInt(item?.querySelector('.count')?.textContent ?? '0', 10) || 0;
+    }
+
+    function getCategoryItemByName(categoryName) {
+      return getCategoryItems().find((item) => getCategoryName(item) === categoryName) ?? null;
+    }
+
+    function changeCategoryCount(categoryName, delta) {
+      const item = getCategoryItemByName(categoryName);
+      if (!item) return;
+      item.querySelector('.count').textContent = String(Math.max(0, getCategoryCount(item) + delta));
+    }
+
+    function changeAccountTotal(delta) {
+      const currentTotal = Number.parseInt(accountMetricValue.textContent, 10) || 0;
+      const nextTotal = Math.max(0, currentTotal + delta);
+      accountMetricValue.textContent = String(nextTotal);
+      sidebarAccountCount.textContent = String(nextTotal);
     }
 
     function updateCategoryMetric() {
@@ -1597,17 +1661,75 @@
     function resetAccountFormState() {
       createForm.reset();
       resetAccountPasswordVisibility();
+      accountDialogMode = 'create';
+      editingAccountRow = null;
+      accountDialogTitle.textContent = '新增账号';
+      saveAccountButton.textContent = '保存账号';
+      deleteAccountButton.hidden = true;
     }
 
     function closeAccountEditor() {
-      resetAccountFormState();
       accountDialog.close();
     }
 
-    document.querySelector('#openCreateDialog').addEventListener('click', () => {
+    function openAccountEditor(mode, row = null) {
+      resetAccountFormState();
+      syncAccountCategoryOptions();
+      accountDialogMode = mode;
+      editingAccountRow = row;
+
+      if (mode === 'edit' && row) {
+        accountDialogTitle.textContent = '编辑账号';
+        saveAccountButton.textContent = '保存修改';
+        deleteAccountButton.hidden = false;
+        serviceNameInput.value = row.dataset.accountName;
+        accountPasswordInput.value = row.dataset.password;
+        accountAddressInput.value = row.dataset.address;
+        accountEmailInput.value = row.dataset.email;
+        accountNotesInput.value = row.dataset.notes;
+        accountCategoryInput.value = row.dataset.category;
+      }
+
       accountDialog.showModal();
       window.setTimeout(() => serviceNameInput.focus(), 0);
-    });
+    }
+
+    function formatAccountAddress(address) {
+      return address.replace(/^https?:\/\//i, '').replace(/\/$/, '') || '未填写地址';
+    }
+
+    function getAccountMark(accountName) {
+      const words = accountName.trim().split(/\s+/).filter(Boolean);
+      if (words.length > 1) return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase();
+      return accountName.slice(0, 2).toUpperCase();
+    }
+
+    function updateAccountRow(row, account) {
+      row.dataset.accountName = account.name;
+      row.dataset.password = account.password;
+      row.dataset.address = account.address;
+      row.dataset.email = account.email;
+      row.dataset.notes = account.notes;
+      row.dataset.category = account.category;
+      row.dataset.search = [account.name, account.address, account.email, account.notes, account.category].join(' ').toLowerCase();
+      row.querySelector('.service-mark').textContent = getAccountMark(account.name);
+      row.querySelector('.account-name strong').textContent = account.name;
+      row.querySelector('.account-name small').textContent = formatAccountAddress(account.address);
+      row.children[1].textContent = account.email || '—';
+      const badge = row.querySelector('.category-badge');
+      badge.dataset.category = account.category;
+      badge.textContent = account.category;
+      const passwordMask = row.querySelector('.password-mask');
+      passwordMask.textContent = '••••••••••••';
+      passwordMask.dataset.revealed = 'false';
+    }
+
+    function bindAccountRow(row) {
+      row.addEventListener('click', () => openAccountEditor('edit', row));
+    }
+
+    document.querySelector('#openCreateDialog').addEventListener('click', () => openAccountEditor('create'));
+    rows.forEach(bindAccountRow);
 
     document.querySelector('#closeCreateDialog').addEventListener('click', closeAccountEditor);
     document.querySelector('#cancelCreateDialog').addEventListener('click', closeAccountEditor);
@@ -1628,8 +1750,64 @@
     createForm.addEventListener('submit', (event) => {
       event.preventDefault();
       if (!createForm.reportValidity()) return;
+
+      if (accountDialogMode === 'edit' && editingAccountRow) {
+        const row = editingAccountRow;
+        const oldCategory = row.dataset.category;
+        const account = {
+          name: serviceNameInput.value.trim(),
+          password: accountPasswordInput.value,
+          address: accountAddressInput.value.trim(),
+          email: accountEmailInput.value.trim(),
+          notes: accountNotesInput.value.trim(),
+          category: accountCategoryInput.value
+        };
+
+        updateAccountRow(row, account);
+        if (oldCategory !== account.category) {
+          changeCategoryCount(oldCategory, -1);
+          changeCategoryCount(account.category, 1);
+        }
+        accountDialog.close();
+        applyFilter();
+        showToast(`账号“${account.name}”已更新`);
+        return;
+      }
+
       accountDialog.close();
       showToast('原型演示：账号已保存');
+    });
+
+    deleteAccountButton.addEventListener('click', () => {
+      if (!editingAccountRow) return;
+      pendingDeleteAccountRow = editingAccountRow;
+      deleteAccountName.textContent = editingAccountRow.dataset.accountName;
+      deleteAccountDialog.showModal();
+    });
+
+    function closeDeleteAccountConfirmation() {
+      deleteAccountDialog.close();
+    }
+
+    document.querySelector('#closeDeleteAccountDialog').addEventListener('click', closeDeleteAccountConfirmation);
+    document.querySelector('#cancelDeleteAccount').addEventListener('click', closeDeleteAccountConfirmation);
+    deleteAccountDialog.addEventListener('close', () => {
+      pendingDeleteAccountRow = null;
+    });
+
+    document.querySelector('#confirmDeleteAccount').addEventListener('click', () => {
+      if (!pendingDeleteAccountRow) return;
+      const row = pendingDeleteAccountRow;
+      const accountName = row.dataset.accountName;
+      const categoryName = row.dataset.category;
+      row.remove();
+      rows = rows.filter((candidate) => candidate !== row);
+      changeCategoryCount(categoryName, -1);
+      changeAccountTotal(-1);
+      deleteAccountDialog.close();
+      accountDialog.close();
+      applyFilter();
+      showToast(`账号“${accountName}”已删除`);
     });
 
     document.querySelectorAll('.copy-action').forEach((button) => {
@@ -1642,8 +1820,11 @@
     document.querySelectorAll('.reveal-action').forEach((button) => {
       button.addEventListener('click', (event) => {
         event.stopPropagation();
-        const mask = button.closest('tr').querySelector('.password-mask');
-        mask.textContent = mask.textContent.includes('•') ? 'Demo-p@ss-26' : '••••••••••••';
+        const row = button.closest('tr');
+        const mask = row.querySelector('.password-mask');
+        const isRevealed = mask.dataset.revealed === 'true';
+        mask.textContent = isRevealed ? '••••••••••••' : row.dataset.password;
+        mask.dataset.revealed = String(!isRevealed);
       });
     });
   </script>
