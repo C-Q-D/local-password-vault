@@ -144,7 +144,10 @@ svg {
   cursor: pointer;
 }
 
-.category-item:hover { background: #efefed; }
+.category-item:hover,
+.category-item.active { background: #efefed; }
+
+.category-item.active { color: #302b80; font-weight: 600; }
 
 .category-dot {
   width: 7px;

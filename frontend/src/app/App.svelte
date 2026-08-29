@@ -22,6 +22,7 @@
   let deleteError = "";
   let notice = "";
   let noticeTimer: number | undefined;
+  let selectedCategoryId: string | "uncategorized" | null = null;
   let categoryName = "";
   let categoryError = "";
   let categorySubmitting = false;
@@ -82,6 +83,21 @@
     notice = message;
     if (noticeTimer) window.clearTimeout(noticeTimer);
     noticeTimer = window.setTimeout(() => (notice = ""), 2600);
+  }
+
+  function selectedCategory(): CategorySummary | null {
+    if (!vault || !selectedCategoryId || selectedCategoryId === "uncategorized") return null;
+    return vault.categories.find((category) => category.id === selectedCategoryId) ?? null;
+  }
+
+  function selectedAccountCount(): number {
+    if (selectedCategoryId === "uncategorized") return vault?.uncategorizedCount ?? 0;
+    return selectedCategory()?.accountCount ?? vault?.accountCount ?? 0;
+  }
+
+  function selectedViewName(): string {
+    if (selectedCategoryId === "uncategorized") return "未分类";
+    return selectedCategory()?.name ?? "全部账号";
   }
 
   function requestDeleteCategory(category: CategorySummary) {
@@ -150,6 +166,7 @@
     try {
       const deletedName = pendingDeleteCategory.name;
       vault = await deleteCategory(pendingDeleteCategory.id);
+      if (selectedCategoryId === pendingDeleteCategory.id) selectedCategoryId = null;
       pendingDeleteCategory = null;
       showNotice(`分类“${deletedName}”已删除`);
     } catch (error) {
@@ -194,7 +211,7 @@
     </div>
 
     <p class="nav-label">密码库</p>
-    <button class="nav-item active" type="button">
+    <button class:active={selectedCategoryId === null} class="nav-item" type="button" onclick={() => (selectedCategoryId = null)}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg>
       <span>账号管理</span>
       <span class="count">{vault?.accountCount ?? 0}</span>
@@ -208,13 +225,13 @@
     </div>
     <div class="category-list">
       {#each vault?.categories ?? [] as category (category.id)}
-        <button class="category-item" type="button" title={category.name} oncontextmenu={(event) => openCategoryMenu(event, category)}>
+        <button class:active={selectedCategoryId === category.id} class="category-item" type="button" title={category.name} onclick={() => (selectedCategoryId = category.id)} oncontextmenu={(event) => openCategoryMenu(event, category)}>
           <span class="category-dot"></span>
           <span class="category-name">{category.name}</span>
           <span class="count">{category.accountCount}</span>
         </button>
       {/each}
-      <button class="category-item" type="button" title="未分类">
+      <button class:active={selectedCategoryId === "uncategorized"} class="category-item" type="button" title="未分类" onclick={() => (selectedCategoryId = "uncategorized")}>
         <span class="category-dot muted"></span>
         <span class="category-name">未分类</span>
         <span class="count">{vault?.uncategorizedCount ?? 0}</span>
@@ -260,6 +277,7 @@
             <button class="secondary-button" type="button" onclick={refreshVault}>重试</button>
           </section>
         {:else}
+          {#if selectedCategoryId === null}
           <section class="metric-grid" aria-label="密码库概览">
             <article class="metric-card">
               <div class="metric-title">
@@ -306,12 +324,13 @@
               <span><i class="muted"></i>密码复制</span>
             </div>
           </section>
+          {/if}
 
           <section class="panel table-panel">
             <div class="panel-head table-heading">
               <div>
-                <h2>全部账号</h2>
-                <p>{vault?.accountCount ?? 0} 个账号</p>
+                <h2>{selectedViewName()}</h2>
+                <p>{selectedAccountCount()} 个账号</p>
               </div>
               <label class="sort-control">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6M4 5v14" /></svg>
