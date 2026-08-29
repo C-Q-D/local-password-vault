@@ -1,10 +1,20 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { loadVault, type VaultStatus } from "../lib/tauri/commands";
+  import {
+    createCategory,
+    loadVault,
+    type CommandError,
+    type VaultStatus,
+  } from "../lib/tauri/commands";
 
   let status: "loading" | "ready" | "error" = "loading";
   let vault: VaultStatus | null = null;
   let errorMessage = "";
+  let categoryDialogOpen = false;
+  let categoryName = "";
+  let categoryError = "";
+  let categorySubmitting = false;
+  let categoryInput: HTMLInputElement;
 
   /** 每次只接受 Rust 已确认的摘要；调用失败时不伪装成空密码库。 */
   async function refreshVault() {
@@ -24,7 +34,58 @@
   onMount(() => {
     void refreshVault();
   });
+
+  /** 每次打开新建弹框都从空表单开始。 */
+  function openCategoryDialog() {
+    categoryName = "";
+    categoryError = "";
+    categoryDialogOpen = true;
+    requestAnimationFrame(() => categoryInput?.focus());
+  }
+
+  /** 关闭和取消只清理表单，不触发必填校验或后端写入。 */
+  function closeCategoryDialog() {
+    if (categorySubmitting) return;
+    categoryDialogOpen = false;
+    categoryName = "";
+    categoryError = "";
+  }
+
+  function commandMessage(error: unknown): string {
+    const commandError = error as Partial<CommandError> | null;
+    if (commandError?.code === "CATEGORY_NAME_EMPTY") return "请输入分类名称";
+    if (commandError?.code === "CATEGORY_NAME_DUPLICATE") return "该分类名称已经存在";
+    if (commandError?.message) return commandError.message;
+    return "分类保存失败，请重试";
+  }
+
+  async function submitCategory(event: SubmitEvent) {
+    event.preventDefault();
+    if (!categoryName.trim()) {
+      categoryError = "请输入分类名称";
+      categoryInput?.focus();
+      return;
+    }
+
+    categorySubmitting = true;
+    categoryError = "";
+    try {
+      vault = await createCategory(categoryName);
+      categoryDialogOpen = false;
+      categoryName = "";
+    } catch (error) {
+      categoryError = commandMessage(error);
+    } finally {
+      categorySubmitting = false;
+    }
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && categoryDialogOpen) closeCategoryDialog();
+  }
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <svelte:head>
   <title>Local Vault · 账号管理</title>
@@ -49,11 +110,24 @@
 
     <div class="category-heading">
       <p class="nav-label">分类</p>
-      <button class="icon-button quiet" type="button" disabled aria-label="新增分类" title="等待分类后端接入">
+      <button class="icon-button quiet" type="button" onclick={openCategoryDialog} disabled={status !== "ready"} aria-label="新增分类" title="新建分类">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       </button>
     </div>
-    <div class="category-empty">暂无分类</div>
+    <div class="category-list">
+      {#each vault?.categories ?? [] as category (category.id)}
+        <button class="category-item" type="button" title={category.name}>
+          <span class="category-dot"></span>
+          <span class="category-name">{category.name}</span>
+          <span class="count">{category.accountCount}</span>
+        </button>
+      {/each}
+      <button class="category-item" type="button" title="未分类">
+        <span class="category-dot muted"></span>
+        <span class="category-name">未分类</span>
+        <span class="count">{vault?.uncategorizedCount ?? 0}</span>
+      </button>
+    </div>
 
     <div class="vault-status">
       <span class:online={status === "ready"} class="status-dot"></span>
@@ -181,3 +255,35 @@
     </section>
   </main>
 </div>
+
+{#if categoryDialogOpen}
+  <div class="dialog-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && closeCategoryDialog()}>
+    <div class="compact-dialog" role="dialog" aria-modal="true" aria-labelledby="category-dialog-title">
+      <form onsubmit={submitCategory} novalidate>
+        <header class="dialog-head">
+          <h2 id="category-dialog-title">新建分类</h2>
+          <button class="dialog-close" type="button" onclick={closeCategoryDialog} disabled={categorySubmitting} aria-label="关闭">×</button>
+        </header>
+        <div class="dialog-body">
+          <label class="field-label" for="category-name">分类名称</label>
+          <input
+            id="category-name"
+            class:invalid={Boolean(categoryError)}
+            bind:this={categoryInput}
+            bind:value={categoryName}
+            oninput={() => (categoryError = "")}
+            maxlength="24"
+            autocomplete="off"
+            placeholder="例如：工作"
+            disabled={categorySubmitting}
+          />
+          {#if categoryError}<p class="field-error" role="alert">{categoryError}</p>{/if}
+        </div>
+        <footer class="dialog-foot">
+          <button class="secondary-button" type="button" onclick={closeCategoryDialog} disabled={categorySubmitting}>取消</button>
+          <button class="primary-button" type="submit" disabled={categorySubmitting}>{categorySubmitting ? "保存中" : "创建分类"}</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+{/if}

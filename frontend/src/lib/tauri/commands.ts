@@ -14,6 +14,12 @@ export type VaultStatus = {
   accountCount: number;
   initialized: boolean;
   categories: CategorySummary[];
+  uncategorizedCount: number;
+};
+
+export type CommandError = {
+  code: string;
+  message: string;
 };
 
 /** 所有 Tauri command 名称集中在这一层，组件不直接拼写 IPC 协议。 */

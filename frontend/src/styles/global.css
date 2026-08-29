@@ -121,10 +121,56 @@ svg {
   color: #6e6e6a;
 }
 
-.category-empty {
-  padding: 10px;
-  color: #a0a09c;
-  font-size: 10px;
+.icon-button.quiet:not(:disabled) { cursor: pointer; }
+.icon-button.quiet:not(:disabled):hover { background: #eeeeeb; }
+
+.category-list {
+  display: grid;
+  gap: 3px;
+}
+
+.category-item {
+  display: flex;
+  width: 100%;
+  height: 33px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 0 10px;
+  color: #555551;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.category-item:hover { background: #efefed; }
+
+.category-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #5e6db2;
+}
+
+.category-dot.muted { background: #aaa9a5; }
+
+.category-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-item .count {
+  min-width: 20px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: #eeeeeb;
+  padding: 2px 6px;
+  color: #777773;
+  font-size: 9px;
+  text-align: center;
 }
 
 .vault-status {
@@ -503,6 +549,89 @@ th:last-child { width: 70px; }
   margin-top: 5px;
   color: #9f6262;
   font-size: 10px;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(31 31 31 / 24%);
+}
+
+.compact-dialog {
+  width: min(390px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgb(0 0 0 / 12%);
+}
+
+.dialog-head {
+  display: flex;
+  height: 55px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 0 18px;
+}
+
+.dialog-head h2 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.dialog-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #777773;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dialog-close:hover { background: #f2f2f0; }
+
+.dialog-body { padding: 18px; }
+
+.field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #555551;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.dialog-body input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #d8d8d4;
+  border-radius: 8px;
+  outline: 0;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+.dialog-body input:focus { border-color: #7771ba; }
+.dialog-body input.invalid { border-color: #b95c5c; }
+
+.field-error {
+  margin-top: 7px;
+  color: #a84848;
+  font-size: 10px;
+}
+
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 12px 18px;
 }
 
 @media (max-width: 1180px) {

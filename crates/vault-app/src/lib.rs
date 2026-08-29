@@ -22,6 +22,7 @@ pub struct VaultSnapshot {
     pub account_count: usize,
     pub initialized: bool,
     pub categories: Vec<CategorySummary>,
+    pub uncategorized_count: usize,
 }
 
 /// 应用层只依赖“保存后返回磁盘确认文档”这一条最小持久化能力。
@@ -134,6 +135,12 @@ fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
         account_count: state.document.accounts.len(),
         initialized: state.initialized,
         categories,
+        uncategorized_count: state
+            .document
+            .accounts
+            .iter()
+            .filter(|account| account.category_id.is_none())
+            .count(),
     }
 }
 

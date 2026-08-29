@@ -21,6 +21,7 @@ pub(crate) struct VaultStatusDto {
     account_count: usize,
     initialized: bool,
     categories: Vec<CategoryDto>,
+    uncategorized_count: usize,
 }
 
 impl From<VaultSnapshot> for VaultStatusDto {
@@ -36,6 +37,7 @@ impl From<VaultSnapshot> for VaultStatusDto {
                 .into_iter()
                 .map(CategoryDto::from)
                 .collect(),
+            uncategorized_count: snapshot.uncategorized_count,
         }
     }
 }
@@ -118,6 +120,7 @@ mod tests {
                 name: "工作".to_owned(),
                 account_count: 0,
             }],
+            uncategorized_count: 0,
         });
 
         assert_eq!(dto.categories[0].name, "工作");
