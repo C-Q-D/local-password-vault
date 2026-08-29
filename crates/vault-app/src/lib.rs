@@ -3,7 +3,7 @@
 use std::sync::Mutex;
 
 use uuid::Uuid;
-use vault_core::{CategoryError, VaultDocument};
+use vault_core::{AccountError, CategoryError, CreateAccount, VaultDocument};
 use vault_storage::{OpenedVault, VaultOpenError};
 
 /// 分类在前端可见的安全摘要，不包含任何账号字段或密码。
@@ -12,6 +12,27 @@ pub struct CategorySummary {
     pub id: String,
     pub name: String,
     pub account_count: usize,
+}
+
+/// 账号列表只返回定位和展示所需字段，明文密码始终留在 Rust 内存边界内。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountSummary {
+    pub id: String,
+    pub category_id: Option<String>,
+    pub username: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+}
+
+/// Tauri 传入应用层的新增账号数据；分类 ID 在当前确认快照内重新验证。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateAccountInput {
+    pub category_id: Option<String>,
+    pub username: String,
+    pub password: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub notes: Option<String>,
 }
 
 /// 前端启动和分类写操作共同返回的非敏感密码库快照。
@@ -24,6 +45,7 @@ pub struct VaultSnapshot {
     pub initialized: bool,
     pub categories: Vec<CategorySummary>,
     pub uncategorized_count: usize,
+    pub accounts: Vec<AccountSummary>,
 }
 
 /// 应用层只依赖“保存后返回磁盘确认文档”这一条最小持久化能力。
@@ -38,6 +60,8 @@ pub enum VaultApplicationError {
     CategoryNotEmpty,
     CategoryNameEmpty,
     CategoryNameDuplicate,
+    AccountUsernameRequired,
+    AccountPasswordRequired,
     VaultSaveFailed,
     StateUnavailable,
 }
@@ -159,6 +183,45 @@ impl VaultApplication {
         state.document = confirmed;
         Ok(snapshot_from(&state))
     }
+
+    /// 新增账号并持久化；只有磁盘确认成功后才发布不含密码的列表快照。
+    pub fn create_account(
+        &self,
+        input: CreateAccountInput,
+    ) -> Result<VaultSnapshot, VaultApplicationError> {
+        let category_id = input
+            .category_id
+            .as_deref()
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|_| VaultApplicationError::CategoryNotFound)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let mut candidate = state.document.clone();
+        candidate
+            .create_account(CreateAccount {
+                category_id,
+                username: input.username,
+                password: input.password,
+                address: input.address,
+                email: input.email,
+                notes: input.notes,
+            })
+            .map_err(map_account_error)?;
+        candidate.revision = candidate
+            .revision
+            .checked_add(1)
+            .ok_or(VaultApplicationError::VaultSaveFailed)?;
+
+        let confirmed = self
+            .repository
+            .save_confirmed(&candidate)
+            .map_err(|_| VaultApplicationError::VaultSaveFailed)?;
+        state.document = confirmed;
+        Ok(snapshot_from(&state))
+    }
 }
 
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
@@ -167,6 +230,14 @@ fn map_category_error(error: CategoryError) -> VaultApplicationError {
         CategoryError::NotEmpty => VaultApplicationError::CategoryNotEmpty,
         CategoryError::BlankName => VaultApplicationError::CategoryNameEmpty,
         CategoryError::DuplicateName => VaultApplicationError::CategoryNameDuplicate,
+    }
+}
+
+fn map_account_error(error: AccountError) -> VaultApplicationError {
+    match error {
+        AccountError::UsernameRequired => VaultApplicationError::AccountUsernameRequired,
+        AccountError::PasswordRequired => VaultApplicationError::AccountPasswordRequired,
+        AccountError::CategoryNotFound => VaultApplicationError::CategoryNotFound,
     }
 }
 
@@ -200,6 +271,18 @@ fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
             .iter()
             .filter(|account| account.category_id.is_none())
             .count(),
+        accounts: state
+            .document
+            .accounts
+            .iter()
+            .map(|account| AccountSummary {
+                id: account.id.to_string(),
+                category_id: account.category_id.map(|id| id.to_string()),
+                username: account.username.clone(),
+                address: account.address.clone(),
+                email: account.email.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -432,5 +515,61 @@ mod tests {
 
         assert_eq!(application.snapshot().expect("快照应可读取"), before);
         assert_eq!(save_count.load(Ordering::SeqCst), 0);
+    }
+
+    fn account_input(category_id: Option<String>, username: &str) -> CreateAccountInput {
+        CreateAccountInput {
+            category_id,
+            username: username.to_owned(),
+            password: "仅用于隔离测试的密码".to_owned(),
+            address: Some("https://example.invalid".to_owned()),
+            email: None,
+            notes: None,
+        }
+    }
+
+    #[test]
+    fn create_account_publishes_safe_confirmed_snapshot_once() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+
+        let first = application
+            .create_account(account_input(Some(category.id.to_string()), "工作账号"))
+            .expect("首个账号应创建成功");
+        let second = application
+            .create_account(account_input(None, "个人账号"))
+            .expect("同地址账号应独立创建");
+
+        assert_eq!(first.revision, 1);
+        assert_eq!(second.revision, 2);
+        assert_eq!(second.accounts.len(), 2);
+        assert_ne!(second.accounts[0].id, second.accounts[1].id);
+        assert_eq!(second.categories[0].account_count, 1);
+        assert_eq!(second.uncategorized_count, 1);
+        assert_eq!(save_count.load(Ordering::SeqCst), 2);
+        assert_eq!(application.snapshot().expect("快照应可读取"), second);
+    }
+
+    #[test]
+    fn create_account_failure_keeps_previous_confirmed_snapshot() {
+        let (application, _, save_count) = application(true);
+        let before = application.snapshot().expect("快照应可读取");
+
+        assert_eq!(
+            application.create_account(account_input(None, "有效账号")),
+            Err(VaultApplicationError::VaultSaveFailed)
+        );
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+
+        let mut invalid = account_input(None, "  ");
+        invalid.password = " ".to_owned();
+        assert_eq!(
+            application.create_account(invalid),
+            Err(VaultApplicationError::AccountUsernameRequired)
+        );
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
     }
 }
