@@ -18,6 +18,14 @@ impl DataKey {
         Self(bytes)
     }
 
+    /// 从借用缓冲直接复制到会在销毁时清零的密钥字段。
+    #[must_use]
+    pub fn copy_from_bytes(bytes: &[u8; DATA_KEY_LENGTH]) -> Self {
+        let mut key = Self([0_u8; DATA_KEY_LENGTH]);
+        key.0.copy_from_slice(bytes);
+        key
+    }
+
     pub(crate) fn generate() -> Result<Self, EnvelopeError> {
         let mut bytes = [0_u8; DATA_KEY_LENGTH];
         getrandom::fill(&mut bytes).map_err(|_| EnvelopeError::RandomFailed)?;

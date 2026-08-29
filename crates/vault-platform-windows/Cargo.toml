@@ -8,6 +8,7 @@ rust-version.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+vault-storage = { path = "../vault-storage" }
 windows = { version = "=0.62.2", features = [
   "Win32_Foundation",
   "Win32_Security_Cryptography_UI",
@@ -15,3 +16,7 @@ windows = { version = "=0.62.2", features = [
   "Win32_System_DataExchange",
   "Win32_System_Memory",
 ] }
+zeroize = "1.9.0"
+
+[dev-dependencies]
+getrandom = "0.4.3"

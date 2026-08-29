@@ -3911,7 +3911,10 @@ dependencies = [
 name = "vault-platform-windows"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.4.3",
+ "vault-storage",
  "windows 0.62.2",
+ "zeroize",
 ]
 
 [[package]]

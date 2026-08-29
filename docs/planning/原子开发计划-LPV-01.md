@@ -35,8 +35,8 @@
 |---|---|---|---|---|
 | 1 | LPV-01-01 定义空密码库文档 | 无 | L1 | done |
 | 2 | LPV-01-02 加密和认证空密码库信封 | LPV-01-01 | L3 | done |
-| 3 | LPV-01-03 使用 DPAPI 保护数据密钥 | LPV-01-02 | L3 | in_progress |
-| 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | pending |
+| 3 | LPV-01-03 使用 DPAPI 保护数据密钥 | LPV-01-02 | L3 | done |
+| 4 | LPV-01-04 首次原子发布和读取主库 | LPV-01-02 | L3 | in_progress |
 | 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | pending |
 | 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | pending |
 | 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | pending |
@@ -90,7 +90,7 @@
 
 ## LPV-01-03 使用 DPAPI 保护数据密钥
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：数据密钥不以明文存盘，同一 Windows 用户可重新解包。
 - 唯一目标：`vault-platform-windows` 使用 CurrentUser DPAPI 包装和解包恰好 32 字节的数据密钥。
 - 当前行为与目标行为：当前 `dpapi.rs` 只有模块说明；完成后实现 `vault-storage` 定义的密钥保护接口。
@@ -113,7 +113,7 @@
 
 ## LPV-01-04 首次原子发布和读取主库
 
-- 状态：pending
+- 状态：in_progress
 - 支持的验收场景：首次保存不会覆盖已有主库，失败不会产生半写 main。
 - 唯一目标：Windows 文件实现能在指定隔离目录把完整候选字节首次发布为 `vault.dat`，并重新读取相同字节。
 - 当前行为与目标行为：当前 `atomic_file.rs` 只有模块说明；完成后实现 `vault-storage` 定义的首次文件接口。
@@ -257,3 +257,11 @@
 - DDD 记录：首次反证阻断了未明确 AAD 的计划契约；修订后复核又阻断了未启用 cipher `zeroize` feature 的实现；两项最小修正完成后最终结论为 PASS。
 - 验证证据：`cargo test -p vault-storage`（5 项通过）、`cargo check -p vault-storage`、`cargo clippy -p vault-storage --all-targets -- -D warnings`、格式和 diff 检查均通过；`cargo tree -e features` 证明 AES、GHASH 和 Polyval 的 `zeroize` 已启用。
 - 范围确认：未调用 DPAPI、未读写文件、未修改 Tauri 或前端。
+
+### LPV-01-03
+
+- 完成结果：实现 CurrentUser `CryptProtectData` / `CryptUnprotectData` 的 `KeyProtector`，只启用 `CRYPTPROTECT_UI_FORBIDDEN`，解包结果严格要求 32 字节。
+- 资源证据：调用前创建 RAII guard 接管输出；解包缓冲在所有退出路径对完整实际 `cbData` 执行 `zeroize` 后再 `LocalFree`；不请求额外描述字符串。
+- DDD 记录：首次反证阻断了不存在的 `SecureZeroMemory` 绑定并改为可验证 `zeroize`；实现复核阻断了无清理栈数组副本，改为从借用数组直接复制进 `DataKey`；最终结论为 PASS。
+- 验证证据：真实当前 Windows 用户 DPAPI 4 项测试通过；`vault-storage` 5 项回归通过；目标 crate check、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
+- 范围确认：未修改文件发布、Tauri 或前端；工作区并行出现的 `prototypes/` 未读取业务内容、未修改、未纳入本原子。
