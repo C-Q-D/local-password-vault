@@ -4,8 +4,10 @@
     createAccount,
     createCategory,
     deleteCategory,
+    loadAccountForEdit,
     loadVault,
     renameCategory,
+    updateAccount,
     type AccountSummary,
     type CategorySummary,
     type CommandError,
@@ -30,6 +32,11 @@
   let categorySubmitting = false;
   let categoryInput: HTMLInputElement;
   let accountDialogOpen = false;
+  let accountDialogMode: "create" | "edit" = "create";
+  let editingAccountId: string | null = null;
+  let accountDetailLoaded = false;
+  let accountLoading = false;
+  let accountLoadSequence = 0;
   let accountSubmitting = false;
   let accountError = "";
   let accountUsernameError = "";
@@ -139,6 +146,10 @@
 
   /** 新增账号每次都使用全新的 Draft，取消后不会残留上一次输入。 */
   function openAccountDialog() {
+    accountDialogMode = "create";
+    editingAccountId = null;
+    accountDetailLoaded = true;
+    accountLoading = false;
     accountDraft = emptyAccountDraft();
     if (selectedCategoryId && selectedCategoryId !== "uncategorized") {
       accountDraft.categoryId = selectedCategoryId;
@@ -151,10 +162,52 @@
     requestAnimationFrame(() => accountUsernameInput?.focus());
   }
 
+  /** 只在用户点击一条账号行后读取该账号的编辑详情。 */
+  async function openEditAccountDialog(accountId: string) {
+    const sequence = ++accountLoadSequence;
+    accountDialogMode = "edit";
+    editingAccountId = accountId;
+    accountDetailLoaded = false;
+    accountLoading = true;
+    accountDraft = emptyAccountDraft();
+    accountError = "";
+    accountUsernameError = "";
+    accountPasswordError = "";
+    accountPasswordVisible = false;
+    accountDialogOpen = true;
+
+    try {
+      const detail = await loadAccountForEdit(accountId);
+      // 关闭弹框或切换目标后，迟到响应不得重新填入旧账号密码。
+      if (sequence !== accountLoadSequence || !accountDialogOpen || editingAccountId !== accountId) return;
+      accountDraft = {
+        username: detail.username,
+        password: detail.password,
+        address: detail.address ?? "",
+        email: detail.email ?? "",
+        notes: detail.notes ?? "",
+        categoryId: detail.categoryId ?? "uncategorized",
+      };
+      accountDetailLoaded = true;
+      requestAnimationFrame(() => accountUsernameInput?.focus());
+    } catch (error) {
+      if (sequence !== accountLoadSequence || !accountDialogOpen) return;
+      const commandError = error as Partial<CommandError> | null;
+      accountError = commandError?.message || "账号详情加载失败，请关闭后重试";
+    } finally {
+      if (sequence === accountLoadSequence) accountLoading = false;
+    }
+  }
+
   /** 关闭、取消和 Esc 只丢弃 Draft，不触发字段校验。 */
   function closeAccountDialog() {
     if (accountSubmitting) return;
+    accountLoadSequence += 1;
     accountDialogOpen = false;
+    accountDialogMode = "create";
+    editingAccountId = null;
+    accountDetailLoaded = false;
+    accountLoading = false;
     accountDraft = emptyAccountDraft();
     accountError = "";
     accountUsernameError = "";
@@ -175,19 +228,29 @@
       return;
     }
 
+    if (accountDialogMode === "edit" && (!editingAccountId || !accountDetailLoaded)) return;
     accountSubmitting = true;
     try {
-      vault = await createAccount({
-        categoryId: accountDraft.categoryId === "uncategorized" ? null : accountDraft.categoryId,
+      const fields = {
         username: accountDraft.username,
         password: accountDraft.password,
         address: optionalField(accountDraft.address),
         email: optionalField(accountDraft.email),
         notes: optionalField(accountDraft.notes),
-      });
+      };
+      vault = accountDialogMode === "edit" && editingAccountId
+        ? await updateAccount(editingAccountId, fields)
+        : await createAccount({
+            ...fields,
+            categoryId: accountDraft.categoryId === "uncategorized" ? null : accountDraft.categoryId,
+          });
+      const edited = accountDialogMode === "edit";
       accountDialogOpen = false;
+      accountDialogMode = "create";
+      editingAccountId = null;
+      accountDetailLoaded = false;
       accountDraft = emptyAccountDraft();
-      showNotice("账号已保存");
+      showNotice(edited ? "账号修改已保存" : "账号已保存");
     } catch (error) {
       const commandError = error as Partial<CommandError> | null;
       if (commandError?.code === "ACCOUNT_USERNAME_REQUIRED") accountUsernameError = "请输入账号名";
@@ -456,14 +519,14 @@
                 {#if visibleAccounts().length > 0}
                   <tbody>
                     {#each visibleAccounts() as account (account.id)}
-                      <tr>
+                      <tr class="account-row" role="button" tabindex="0" onclick={() => void openEditAccountDialog(account.id)} onkeydown={(event) => (event.key === "Enter" || event.key === " ") && void openEditAccountDialog(account.id)}>
                         <td><strong class="account-name">{account.username}</strong></td>
                         <td title={account.address ?? ""}>{account.address || "—"}</td>
                         <td title={account.email ?? ""}>{account.email || "—"}</td>
                         <td>{accountCategoryName(account.categoryId)}</td>
                         <td><span class="password-saved">已保存</span></td>
                         <td>未使用</td>
-                        <td><span class="row-placeholder" aria-label="账号操作将在后续接入">•••</span></td>
+                        <td><span class="row-edit-hint">编辑</span></td>
                       </tr>
                     {/each}
                   </tbody>
@@ -502,19 +565,20 @@
     <div class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
       <form onsubmit={submitAccount} novalidate>
         <header class="dialog-head">
-          <h2 id="account-dialog-title">新增账号</h2>
+          <h2 id="account-dialog-title">{accountDialogMode === "edit" ? "编辑账号" : "新增账号"}</h2>
           <button class="dialog-close" type="button" onclick={closeAccountDialog} disabled={accountSubmitting} aria-label="关闭">×</button>
         </header>
-        <div class="dialog-body account-form">
+        <div class="dialog-body account-form" class:account-form-loading={accountLoading}>
+          {#if accountLoading}<p class="account-loading">正在读取账号详情…</p>{/if}
           <div class="field-grid">
             <div class="field">
               <label class="field-label" for="account-username">账号名 <span>*</span></label>
-              <input id="account-username" class:invalid={Boolean(accountUsernameError)} bind:this={accountUsernameInput} bind:value={accountDraft.username} oninput={() => (accountUsernameError = "")} autocomplete="off" placeholder="例如：GitHub 工作账号" disabled={accountSubmitting} />
+              <input id="account-username" class:invalid={Boolean(accountUsernameError)} bind:this={accountUsernameInput} bind:value={accountDraft.username} oninput={() => (accountUsernameError = "")} autocomplete="off" placeholder="例如：GitHub 工作账号" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)} />
               {#if accountUsernameError}<p class="field-error" role="alert">{accountUsernameError}</p>{/if}
             </div>
             <div class="field">
               <label class="field-label" for="account-category">分类 <span>*</span></label>
-              <select id="account-category" bind:value={accountDraft.categoryId} disabled={accountSubmitting}>
+              <select id="account-category" bind:value={accountDraft.categoryId} disabled={accountSubmitting || accountLoading || accountDialogMode === "edit"} title={accountDialogMode === "edit" ? "分类移动将在下一项接入" : ""}>
                 {#each vault?.categories ?? [] as category (category.id)}
                   <option value={category.id}>{category.name}</option>
                 {/each}
@@ -525,30 +589,30 @@
           <div class="field">
             <label class="field-label" for="account-password">密码 <span>*</span></label>
             <div class="password-input">
-              <input id="account-password" class:invalid={Boolean(accountPasswordError)} type={accountPasswordVisible ? "text" : "password"} bind:value={accountDraft.password} oninput={() => (accountPasswordError = "")} autocomplete="new-password" placeholder="请输入密码" disabled={accountSubmitting} />
-              <button type="button" onclick={() => (accountPasswordVisible = !accountPasswordVisible)} disabled={accountSubmitting}>{accountPasswordVisible ? "隐藏" : "显示"}</button>
+              <input id="account-password" class:invalid={Boolean(accountPasswordError)} type={accountPasswordVisible ? "text" : "password"} bind:value={accountDraft.password} oninput={() => (accountPasswordError = "")} autocomplete="new-password" placeholder="请输入密码" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)} />
+              <button type="button" onclick={() => (accountPasswordVisible = !accountPasswordVisible)} disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)}>{accountPasswordVisible ? "隐藏" : "显示"}</button>
             </div>
             {#if accountPasswordError}<p class="field-error" role="alert">{accountPasswordError}</p>{/if}
           </div>
           <div class="field-grid">
             <div class="field">
               <label class="field-label" for="account-address">地址</label>
-              <input id="account-address" bind:value={accountDraft.address} autocomplete="off" placeholder="https://example.com" disabled={accountSubmitting} />
+              <input id="account-address" bind:value={accountDraft.address} autocomplete="off" placeholder="https://example.com" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)} />
             </div>
             <div class="field">
               <label class="field-label" for="account-email">邮箱</label>
-              <input id="account-email" type="email" bind:value={accountDraft.email} autocomplete="off" placeholder="name@example.com" disabled={accountSubmitting} />
+              <input id="account-email" type="email" bind:value={accountDraft.email} autocomplete="off" placeholder="name@example.com" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)} />
             </div>
           </div>
           <div class="field">
             <label class="field-label" for="account-notes">备注</label>
-            <textarea id="account-notes" bind:value={accountDraft.notes} rows="3" placeholder="可选备注" disabled={accountSubmitting}></textarea>
+            <textarea id="account-notes" bind:value={accountDraft.notes} rows="3" placeholder="可选备注" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)}></textarea>
           </div>
           {#if accountError}<p class="field-error account-submit-error" role="alert">{accountError}</p>{/if}
         </div>
         <footer class="dialog-foot">
           <button class="secondary-button" type="button" onclick={closeAccountDialog} disabled={accountSubmitting}>取消</button>
-          <button class="primary-button" type="submit" disabled={accountSubmitting}>{accountSubmitting ? "保存中" : "保存账号"}</button>
+          <button class="primary-button" type="submit" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)}>{accountSubmitting ? "保存中" : accountDialogMode === "edit" ? "保存修改" : "保存账号"}</button>
         </footer>
       </form>
     </div>
