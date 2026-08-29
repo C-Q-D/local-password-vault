@@ -269,6 +269,7 @@ h1 {
   flex: 1;
   overflow: auto;
   padding: 14px 25px 26px;
+  scrollbar-gutter: stable;
 }
 
 .metric-grid {
@@ -511,4 +512,49 @@ th:last-child { width: 70px; }
     padding-right: 18px;
     padding-left: 18px;
   }
+}
+
+/* 默认窗口高度较小时压缩纵向留白，保证账号面板底部首次打开即可看见。 */
+@media (max-height: 760px) {
+  .content-scroll {
+    padding-top: 11px;
+    padding-bottom: 12px;
+  }
+
+  .metric-card {
+    min-height: 94px;
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .metric-card > strong {
+    margin-top: 10px;
+    font-size: 20px;
+  }
+
+  .metric-card > strong.status-value { font-size: 17px; }
+
+  .metric-card p { margin-top: 7px; }
+
+  .panel { margin-top: 10px; }
+
+  .panel-head {
+    min-height: 50px;
+    padding-top: 10px;
+    padding-bottom: 8px;
+  }
+
+  .overview-panel { height: 203px; }
+
+  .overview-placeholder { height: 116px; }
+
+  .line-one { top: 28px; }
+  .line-two { top: 57px; }
+  .line-three { top: 86px; }
+
+  .overview-foot { height: 36px; }
+
+  .table-wrap { margin-bottom: 10px; }
+
+  .empty-state { min-height: 108px; }
 }
