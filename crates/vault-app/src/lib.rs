@@ -2,6 +2,7 @@
 
 use std::sync::Mutex;
 
+use uuid::Uuid;
 use vault_core::{CategoryError, VaultDocument};
 use vault_storage::{OpenedVault, VaultOpenError};
 
@@ -103,6 +104,35 @@ impl VaultApplication {
         state.document = confirmed;
         Ok(snapshot_from(&state))
     }
+
+    /// 重命名分类并持久化；ID 无效与分类不存在使用同一安全错误。
+    pub fn rename_category(
+        &self,
+        id: &str,
+        name: &str,
+    ) -> Result<VaultSnapshot, VaultApplicationError> {
+        let category_id =
+            Uuid::parse_str(id).map_err(|_| VaultApplicationError::CategoryNotFound)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let mut candidate = state.document.clone();
+        candidate
+            .rename_category(category_id, name)
+            .map_err(map_category_error)?;
+        candidate.revision = candidate
+            .revision
+            .checked_add(1)
+            .ok_or(VaultApplicationError::VaultSaveFailed)?;
+
+        let confirmed = self
+            .repository
+            .save_confirmed(&candidate)
+            .map_err(|_| VaultApplicationError::VaultSaveFailed)?;
+        state.document = confirmed;
+        Ok(snapshot_from(&state))
+    }
 }
 
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
@@ -187,6 +217,13 @@ mod tests {
     }
 
     fn application(fail_save: bool) -> (VaultApplication, Arc<AtomicBool>, Arc<AtomicUsize>) {
+        application_with_document(fail_save, VaultDocument::empty())
+    }
+
+    fn application_with_document(
+        fail_save: bool,
+        document: VaultDocument,
+    ) -> (VaultApplication, Arc<AtomicBool>, Arc<AtomicUsize>) {
         let dropped = Arc::new(AtomicBool::new(false));
         let save_count = Arc::new(AtomicUsize::new(0));
         let application = VaultApplication::new(
@@ -194,7 +231,7 @@ mod tests {
                 dropped: Arc::clone(&dropped),
             },
             OpenedVault {
-                document: VaultDocument::empty(),
+                document,
                 initialized: true,
             },
             TestRepository {
@@ -269,6 +306,44 @@ mod tests {
 
         assert_eq!(
             application.create_category("工作"),
+            Err(VaultApplicationError::VaultSaveFailed)
+        );
+
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn rename_category_publishes_once_and_rejects_unknown_id() {
+        let (application, _, save_count) = application(false);
+        let created = application.create_category("工作").expect("分类应创建成功");
+        let category_id = created.categories[0].id.clone();
+
+        let renamed = application
+            .rename_category(&category_id, "开发")
+            .expect("分类应重命名成功");
+
+        assert_eq!(renamed.revision, 2);
+        assert_eq!(renamed.categories[0].name, "开发");
+        assert_eq!(save_count.load(Ordering::SeqCst), 2);
+        let confirmed = application.snapshot().expect("快照应可读取");
+        assert_eq!(
+            application.rename_category("invalid-id", "其他"),
+            Err(VaultApplicationError::CategoryNotFound)
+        );
+        assert_eq!(application.snapshot().expect("快照应可读取"), confirmed);
+        assert_eq!(save_count.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn rename_save_failure_keeps_previous_confirmed_snapshot() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let (application, _, save_count) = application_with_document(true, document);
+        let before = application.snapshot().expect("快照应可读取");
+
+        assert_eq!(
+            application.rename_category(&category.id.to_string(), "开发"),
             Err(VaultApplicationError::VaultSaveFailed)
         );
 

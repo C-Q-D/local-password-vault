@@ -107,6 +107,18 @@ pub(crate) fn create_category(
         .map_err(CommandErrorDto::from)
 }
 
+#[tauri::command]
+pub(crate) fn rename_category(
+    id: String,
+    name: String,
+    application: State<'_, VaultApplication>,
+) -> Result<VaultStatusDto, CommandErrorDto> {
+    application
+        .rename_category(&id, &name)
+        .map(VaultStatusDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

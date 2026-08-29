@@ -10,3 +10,4 @@ path = "src/lib.rs"
 [dependencies]
 vault-core = { path = "../vault-core" }
 vault-storage = { path = "../vault-storage" }
+uuid = "1.26.0"

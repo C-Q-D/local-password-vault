@@ -3937,6 +3937,7 @@ dependencies = [
 name = "vault-app"
 version = "0.1.0"
 dependencies = [
+ "uuid",
  "vault-core",
  "vault-storage",
 ]

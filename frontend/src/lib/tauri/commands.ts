@@ -31,3 +31,8 @@ export function loadVault(): Promise<VaultStatus> {
 export function createCategory(name: string): Promise<VaultStatus> {
   return invoke<VaultStatus>("create_category", { name });
 }
+
+/** 重命名始终按 Rust 返回的稳定分类 ID 定位，不能依赖可能变化的名称。 */
+export function renameCategory(id: string, name: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("rename_category", { id, name });
+}

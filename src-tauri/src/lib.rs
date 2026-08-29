@@ -10,7 +10,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::experiment::check_stack,
             commands::vault::load_vault,
-            commands::vault::create_category
+            commands::vault::create_category,
+            commands::vault::rename_category
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 应用启动失败");
