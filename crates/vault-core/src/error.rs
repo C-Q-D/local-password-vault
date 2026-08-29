@@ -46,3 +46,14 @@ pub enum AccountError {
     #[error("账号分类不存在")]
     CategoryNotFound,
 }
+
+/// 编辑账号字段返回的稳定错误；与创建错误分开，避免不存在目标混入创建路径。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateAccountError {
+    #[error("账号不存在")]
+    NotFound,
+    #[error("账号名不能为空")]
+    UsernameRequired,
+    #[error("密码不能为空")]
+    PasswordRequired,
+}

@@ -21,7 +21,7 @@
 
 ## LPV-07-01 按稳定 ID 更新账号字段候选
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：只修改指定账号字段；清空必填被拒绝；同地址另一账号不变。
 - 唯一目标：`vault-core` 增加不改变 ID 和分类归属的账号字段更新行为。
 - 当前行为与目标行为：账号只能创建；完成后可按 UUID 更新 username、password、address、email、notes。
@@ -42,9 +42,13 @@
 - DDD 门禁：不触发。
 - 计划提交信息：`feat(core): [LPV-07-01] 支持更新账号字段候选`
 
+### 执行记录
+
+- 实际验证：`cargo test -p vault-core update_account` 2 项通过；`cargo check -p vault-core`、格式和差异检查通过。
+
 ## LPV-07-02 暴露账号编辑安全契约
 
-- 状态：pending
+- 状态：in_progress
 - 支持的验收场景：显式打开编辑时取得当前字段；保存一次持久化；失败保持旧快照。
 - 唯一目标：通过应用层和 Tauri/TypeScript 边界提供按 ID 读取编辑详情及提交字段更新的专用契约。
 - 当前行为与目标行为：前端只有安全列表；完成后可在用户明确选择一个账号时短暂取得编辑详情并提交更新。

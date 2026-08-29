@@ -3,5 +3,7 @@
 mod error;
 mod vault;
 
-pub use error::{AccountError, CategoryError, VaultValidationError};
-pub use vault::{Account, CURRENT_SCHEMA_VERSION, Category, CreateAccount, VaultDocument};
+pub use error::{AccountError, CategoryError, UpdateAccountError, VaultValidationError};
+pub use vault::{
+    Account, CURRENT_SCHEMA_VERSION, Category, CreateAccount, UpdateAccount, VaultDocument,
+};

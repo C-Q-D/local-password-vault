@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{AccountError, CategoryError, VaultValidationError};
+use crate::{AccountError, CategoryError, UpdateAccountError, VaultValidationError};
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -127,6 +127,32 @@ impl VaultDocument {
         Ok(account)
     }
 
+    /// 按稳定 ID 更新账号字段；分类归属由后续独立用例处理。
+    pub fn update_account(
+        &mut self,
+        id: Uuid,
+        input: UpdateAccount,
+    ) -> Result<(), UpdateAccountError> {
+        if input.username.trim().is_empty() {
+            return Err(UpdateAccountError::UsernameRequired);
+        }
+        if input.password.trim().is_empty() {
+            return Err(UpdateAccountError::PasswordRequired);
+        }
+        let account = self
+            .accounts
+            .iter_mut()
+            .find(|account| account.id == id)
+            .ok_or(UpdateAccountError::NotFound)?;
+
+        account.username = input.username;
+        account.password = input.password;
+        account.address = input.address;
+        account.email = input.email;
+        account.notes = input.notes;
+        Ok(())
+    }
+
     /// 校验载入和保存共同依赖的领域不变量。
     ///
     /// 校验集中在这里，避免不同读写路径对损坏数据作出不一致判断。
@@ -205,6 +231,16 @@ pub struct Account {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateAccount {
     pub category_id: Option<Uuid>,
+    pub username: String,
+    pub password: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// 账号字段编辑输入不包含 ID 和分类，避免字段编辑意外改变记录归属。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateAccount {
     pub username: String,
     pub password: String,
     pub address: Option<String>,
@@ -492,6 +528,94 @@ mod tests {
         assert_eq!(
             document.create_account(input("账号", "密码", Some(Uuid::new_v4()))),
             Err(AccountError::CategoryNotFound)
+        );
+        assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn update_account_changes_only_target_fields_and_keeps_identity() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let first = document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "旧账号".to_owned(),
+                password: "旧密码".to_owned(),
+                address: Some("https://same.invalid".to_owned()),
+                email: None,
+                notes: None,
+            })
+            .expect("首个账号应创建成功");
+        let untouched = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "同地址账号".to_owned(),
+                password: "另一个密码".to_owned(),
+                address: Some("https://same.invalid".to_owned()),
+                email: None,
+                notes: None,
+            })
+            .expect("第二个账号应创建成功");
+
+        document
+            .update_account(
+                first.id,
+                UpdateAccount {
+                    username: "新账号".to_owned(),
+                    password: "新密码".to_owned(),
+                    address: None,
+                    email: Some("new@example.invalid".to_owned()),
+                    notes: Some("新备注".to_owned()),
+                },
+            )
+            .expect("目标账号应更新成功");
+
+        let updated = &document.accounts[0];
+        assert_eq!(updated.id, first.id);
+        assert_eq!(updated.category_id, first.category_id);
+        assert_eq!(updated.username, "新账号");
+        assert_eq!(updated.password, "新密码");
+        assert_eq!(updated.address, None);
+        assert_eq!(updated.email.as_deref(), Some("new@example.invalid"));
+        assert_eq!(updated.notes.as_deref(), Some("新备注"));
+        assert_eq!(document.accounts[1], untouched);
+    }
+
+    #[test]
+    fn update_account_rejects_invalid_target_or_required_fields_without_mutation() {
+        let mut document = VaultDocument::empty();
+        let account = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "账号".to_owned(),
+                password: "密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("测试账号应创建成功");
+        let confirmed = document.clone();
+        let input = |username: &str, password: &str| UpdateAccount {
+            username: username.to_owned(),
+            password: password.to_owned(),
+            address: None,
+            email: None,
+            notes: None,
+        };
+
+        assert_eq!(
+            document.update_account(account.id, input(" ", "新密码")),
+            Err(UpdateAccountError::UsernameRequired)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.update_account(account.id, input("新账号", "\t")),
+            Err(UpdateAccountError::PasswordRequired)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.update_account(Uuid::new_v4(), input("新账号", "新密码")),
+            Err(UpdateAccountError::NotFound)
         );
         assert_eq!(document, confirmed);
     }
