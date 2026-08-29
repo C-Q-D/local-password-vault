@@ -1,6 +1,9 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
-use vault_app::{CategorySummary, VaultApplication, VaultApplicationError, VaultSnapshot};
+use vault_app::{
+    AccountSummary, CategorySummary, CreateAccountInput, VaultApplication, VaultApplicationError,
+    VaultSnapshot,
+};
 
 /// 分类安全摘要；账号数由 Rust 当前确认文档计算。
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -9,6 +12,29 @@ pub(crate) struct CategoryDto {
     id: String,
     name: String,
     account_count: usize,
+}
+
+/// 账号列表 DTO 明确没有 password 字段，避免明文密码进入前端常驻状态。
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AccountDto {
+    id: String,
+    category_id: Option<String>,
+    username: String,
+    address: Option<String>,
+    email: Option<String>,
+}
+
+/// 新增账号请求仅在 command 调用期间持有明文密码，不写日志也不放入响应。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CreateAccountDto {
+    category_id: Option<String>,
+    username: String,
+    password: String,
+    address: Option<String>,
+    email: Option<String>,
+    notes: Option<String>,
 }
 
 /// Tauri IPC 只返回界面需要的计数、版本和分类，不暴露账号内容。
@@ -22,6 +48,7 @@ pub(crate) struct VaultStatusDto {
     initialized: bool,
     categories: Vec<CategoryDto>,
     uncategorized_count: usize,
+    accounts: Vec<AccountDto>,
 }
 
 impl From<VaultSnapshot> for VaultStatusDto {
@@ -38,6 +65,23 @@ impl From<VaultSnapshot> for VaultStatusDto {
                 .map(CategoryDto::from)
                 .collect(),
             uncategorized_count: snapshot.uncategorized_count,
+            accounts: snapshot
+                .accounts
+                .into_iter()
+                .map(AccountDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<AccountSummary> for AccountDto {
+    fn from(account: AccountSummary) -> Self {
+        Self {
+            id: account.id,
+            category_id: account.category_id,
+            username: account.username,
+            address: account.address,
+            email: account.email,
         }
     }
 }
@@ -78,9 +122,17 @@ impl From<VaultApplicationError> for CommandErrorDto {
                 code: "CATEGORY_NAME_DUPLICATE",
                 message: "分类名称已经存在",
             },
+            VaultApplicationError::AccountUsernameRequired => Self {
+                code: "ACCOUNT_USERNAME_REQUIRED",
+                message: "账号名不能为空",
+            },
+            VaultApplicationError::AccountPasswordRequired => Self {
+                code: "ACCOUNT_PASSWORD_REQUIRED",
+                message: "密码不能为空",
+            },
             VaultApplicationError::VaultSaveFailed => Self {
                 code: "VAULT_SAVE_FAILED",
-                message: "分类保存失败，请重试",
+                message: "密码库保存失败，请重试",
             },
             VaultApplicationError::StateUnavailable => Self {
                 code: "VAULT_STATE_UNAVAILABLE",
@@ -134,12 +186,30 @@ pub(crate) fn delete_category(
         .map_err(CommandErrorDto::from)
 }
 
+#[tauri::command]
+pub(crate) fn create_account(
+    input: CreateAccountDto,
+    application: State<'_, VaultApplication>,
+) -> Result<VaultStatusDto, CommandErrorDto> {
+    application
+        .create_account(CreateAccountInput {
+            category_id: input.category_id,
+            username: input.username,
+            password: input.password,
+            address: input.address,
+            email: input.email,
+            notes: input.notes,
+        })
+        .map(VaultStatusDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn dto_contains_only_safe_category_summary() {
+    fn dto_contains_only_safe_list_summaries() {
         let dto = VaultStatusDto::from(VaultSnapshot {
             schema_version: 1,
             revision: 2,
@@ -152,11 +222,20 @@ mod tests {
                 account_count: 0,
             }],
             uncategorized_count: 0,
+            accounts: vec![AccountSummary {
+                id: "account-id".to_owned(),
+                category_id: Some("safe-id".to_owned()),
+                username: "测试账号".to_owned(),
+                address: Some("https://example.invalid".to_owned()),
+                email: None,
+            }],
         });
 
         assert_eq!(dto.categories[0].name, "工作");
         assert_eq!(dto.categories[0].account_count, 0);
         assert_eq!(dto.revision, 2);
+        assert_eq!(dto.accounts[0].username, "测试账号");
+        assert_eq!(dto.accounts[0].category_id.as_deref(), Some("safe-id"));
     }
 
     #[test]
@@ -172,6 +251,14 @@ mod tests {
         assert_eq!(
             CommandErrorDto::from(VaultApplicationError::VaultSaveFailed).code,
             "VAULT_SAVE_FAILED"
+        );
+        assert_eq!(
+            CommandErrorDto::from(VaultApplicationError::AccountUsernameRequired).code,
+            "ACCOUNT_USERNAME_REQUIRED"
+        );
+        assert_eq!(
+            CommandErrorDto::from(VaultApplicationError::AccountPasswordRequired).code,
+            "ACCOUNT_PASSWORD_REQUIRED"
         );
     }
 }

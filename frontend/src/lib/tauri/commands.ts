@@ -7,6 +7,24 @@ export type CategorySummary = {
   accountCount: number;
 };
 
+/** 账号列表只保留展示字段，不接收明文密码。 */
+export type AccountSummary = {
+  id: string;
+  categoryId: string | null;
+  username: string;
+  address: string | null;
+  email: string | null;
+};
+
+export type CreateAccountInput = {
+  categoryId: string | null;
+  username: string;
+  password: string;
+  address: string | null;
+  email: string | null;
+  notes: string | null;
+};
+
 export type VaultStatus = {
   schemaVersion: number;
   revision: number;
@@ -15,6 +33,7 @@ export type VaultStatus = {
   initialized: boolean;
   categories: CategorySummary[];
   uncategorizedCount: number;
+  accounts: AccountSummary[];
 };
 
 export type CommandError = {
@@ -40,4 +59,9 @@ export function renameCategory(id: string, name: string): Promise<VaultStatus> {
 /** 删除只提交分类 ID；是否为空由 Rust 在持久化前重新判断。 */
 export function deleteCategory(id: string): Promise<VaultStatus> {
   return invoke<VaultStatus>("delete_category", { id });
+}
+
+/** 明文密码只作为本次 command 请求参数发送，响应中的账号列表不含密码。 */
+export function createAccount(input: CreateAccountInput): Promise<VaultStatus> {
+  return invoke<VaultStatus>("create_account", { input });
 }
