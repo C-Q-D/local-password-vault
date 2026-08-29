@@ -8,4 +8,9 @@ rust-version.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+aes-gcm = { version = "0.11.1", features = ["zeroize"] }
+getrandom = "0.4.3"
+serde_json = "1.0"
+thiserror = "2.0.20"
 vault-core = { path = "../vault-core" }
+zeroize = "1.9.0"
