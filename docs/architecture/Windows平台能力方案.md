@@ -34,7 +34,7 @@ windows = { version = "=0.62.2", features = [
 1. 在主文件同目录使用 `create_new` 创建唯一 temp；
 2. 写入完整密文并调用 `File::sync_all`；
 3. 在单写者边界内再次确认 main 不存在；
-4. 使用 `MoveFileExW(temp, main, MOVEFILE_WRITE_THROUGH)`，不允许覆盖；
+4. 使用 `MoveFileW(temp, main)`，目标存在时拒绝覆盖；该路径已在启用 EFS 的真实 AppData 中验证；
 5. 失败时 main 仍不存在，不能声明初始化成功。
 
 该协议处理应用崩溃、重复初始化和普通 I/O 失败。MVP 不把能够在当前用户数据目录任意删改文件、读取当前进程内存并调用同用户 DPAPI 的恶意进程作为文件竞态防护对象，因此不为 temp 路径抢换引入额外句柄重命名协议；应用自身通过唯一 `create_new` temp 和单实例写者避免协作范围内的竞争。
@@ -87,6 +87,7 @@ windows = { version = "=0.62.2", features = [
 - [CryptProtectData](https://learn.microsoft.com/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata)
 - [CryptUnprotectData](https://learn.microsoft.com/windows/win32/api/dpapi/nf-dpapi-cryptunprotectdata)
 - [ReplaceFileW](https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-replacefilew)
+- [MoveFileW](https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-movefilew)
 - [MoveFileExW](https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-movefileexw)
 - [Clipboard Operations](https://learn.microsoft.com/windows/win32/dataxchg/clipboard-operations)
 - [GetClipboardSequenceNumber](https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-getclipboardsequencenumber)

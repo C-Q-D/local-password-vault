@@ -5,7 +5,7 @@
 - 计划 ID：ATOMIC-LPV-01-001
 - 类型：atomic-development
 - 修订版本：6
-- 状态：active
+- 状态：done
 - 父级 ID：LPV-01
 - 创建基线：9a19d6e67c21afe49a8fcfdd10a829468877cd7b
 
@@ -40,7 +40,7 @@
 | 5 | LPV-01-05 初始化或加载空密码库 | LPV-01-03、LPV-01-04 | L3 | done |
 | 6 | LPV-01-06 持有 Windows 单实例锁 | LPV-01-04 | L3 | done |
 | 7 | LPV-01-07 暴露启动状态 command | LPV-01-05、LPV-01-06 | L2 | done |
-| 8 | LPV-01-08 按参考图实现真实空库主界面 | LPV-01-07、原型提交 `a5231bd` | L1 | in_progress |
+| 8 | LPV-01-08 按参考图实现真实空库主界面 | LPV-01-07、原型提交 `a5231bd` | L1 | done |
 
 ## LPV-01-01 定义空密码库文档
 
@@ -118,10 +118,10 @@
 - 唯一目标：Windows 文件实现能在指定隔离目录把完整候选字节首次发布为 `vault.dat`，并重新读取相同字节。
 - 当前行为与目标行为：当前 `atomic_file.rs` 只有模块说明；完成后实现 `vault-storage` 定义的首次文件接口。
 - 前置条件与依赖：LPV-01-02 定义文件接口。
-- 代码定位依据：`crates/vault-platform-windows/src/atomic_file.rs`；官方 `MoveFileExW` 方案已记录。
+- 代码定位依据：`crates/vault-platform-windows/src/atomic_file.rs`；首次发布使用目标存在即失败的 `MoveFileW`。
 - 允许修改：Windows 文件模块、精确 feature、临时目录集成测试；本原子状态记录。
 - 明确不修改：后续 ReplaceFileW、backup、恢复、正式用户目录、Tauri 和前端。
-- 实现步骤：同目录 `create_new` 唯一 temp；写入并 `sync_all`；使用不带覆盖标志的 `MoveFileExW` 发布；从已打开句柄按 64 MiB + 1 限量读取 main；失败时清理本次创建的唯一 temp。
+- 实现步骤：同目录 `create_new` 唯一 temp；写入并 `sync_all`；使用目标存在即失败的 `MoveFileW` 发布；从已打开句柄按 64 MiB + 1 限量读取 main；失败时清理本次创建的唯一 temp。
 - 接口、数据与错误契约：主文件存在时返回 AlreadyExists，不覆盖；所有路径由调用方显式传入；错误不包含文件内容。
 - 边界与异常：只允许当前存储实例生成的 temp 名；测试目录由 `tempfile` 创建；防应用自身崩溃、重复初始化和普通 I/O 失败，不试图抵抗可在当前用户数据目录中任意删改文件并调用同用户 DPAPI 的恶意进程。
 - 测试要求：首次发布/读取往返；已有 main 时拒绝并保持旧字节；空候选被拒绝；失败后 main 不出现半写内容。
@@ -205,7 +205,7 @@
 
 ## LPV-01-08 按参考图实现真实空库主界面
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：用户启动后直接看到真实空库的账号管理工作区、概览计数和账号空状态。
 - 唯一目标：依据原型提交 `a5231bd` 迁移基础布局，并调用真实 `load_vault` 展示空库状态。
 - 当前行为与目标行为：当前是技术实验页面；完成后为固定侧栏与单一大工作区卡片，界面数据来自 Rust 启动摘要。
@@ -230,7 +230,7 @@
 
 - 后端每个原子使用目标 crate 的 `cargo check` 和相关测试。
 - LPV-01-07 后运行 `cargo test --workspace`、前端类型检查和 Tauri Debug command 冒烟；不运行 Release。
-- LPV-01-08 收到参考图后再执行整体前端人工验收。
+- LPV-01-08 已完成前端检查、目标 Rust 测试和真实 Tauri Debug 启动；界面外观与交互由项目所有者继续人工检查。
 
 ## 计划变更记录
 
@@ -242,6 +242,7 @@
 | 4 | 修正 DPAPI 篡改测试判据 | 微软文档说明损坏 blob 可能返回损坏输出，最终完整性必须由 AES-GCM 认证证明 |
 | 5 | 明确首次发布的本机威胁边界并采用有界句柄读取 | 不为越出当前用户信任边界的恶意文件竞争引入句柄重命名协议，同时吸收无界读取反例 |
 | 6 | 参考图已确认，缩小首个正式前端切片为真实空库主界面 | 先复用已完成的安全启动摘要形成最小端到端结果，不提前实现分类或账号业务 |
+| 7 | 首次发布由 `MoveFileExW` 改为 `MoveFileW` | 真实启用 EFS 的 AppData 中前者错误返回跨卷失败，后者保持同目录原子移动且目标存在时拒绝覆盖 |
 
 ## 执行记录
 
@@ -270,7 +271,7 @@
 
 ### LPV-01-04
 
-- 完成结果：定义最小 `VaultFiles` 接口，并实现同目录唯一 temp、完整写入、`sync_all`、无覆盖 `MoveFileExW` 首次发布和 64 MiB + 1 有界句柄读取。
+- 完成结果：定义最小 `VaultFiles` 接口，并实现同目录唯一 temp、完整写入、`sync_all`、无覆盖 `MoveFileW` 首次发布和 64 MiB + 1 有界句柄读取。
 - 写入证据：发布前后都检查 main；目标已存在返回 `AlreadyExists`；失败由 RAII 关闭并清理本次 `create_new` temp；空候选和超大候选在创建 main 前拒绝。
 - DDD 记录：反证提出同用户恶意进程抢换 temp，按产品轻量边界判定越出范围并写明威胁边界；其无界读取反例被吸收为句柄限量读取。按修订范围复核最终为 PASS。
 - 验证证据：Windows 平台 crate 8 项测试、storage 5 项回归、目标 check、双 crate clippy `-D warnings`、格式和 diff 检查均通过。
@@ -299,8 +300,10 @@
 - 验证证据：`cargo test --workspace` 全部通过（29 项单元/集成测试）；`npm run check` 为 0 error / 0 warning；目标 checks、clippy `-D warnings`、格式和 diff 检查均通过。
 - 范围确认：未修改 `frontend/`，未执行 Release，未启动整体界面开发。
 
-### LPV-01-08 当前执行
+### LPV-01-08
 
-- 已解除阻断：项目所有者已确认原型提交 `a5231bd` 作为界面和交互参考。
-- 已具备输入：真实 `load_vault` command 及空库启动 DTO；原型中的固定侧栏、单一工作区、概览区和账号列表空状态。
-- 当前动作：只把真实空库主界面迁移到正式 Svelte；原型继续保持只读参考。
+- 完成结果：正式 Svelte 已替换技术实验页，只迁移最小固定侧栏、单一大工作区、三张后端摘要卡和账号空状态；所有计数和版本来自真实 `load_vault`。
+- 安全边界：未迁移原型的示例账号、明文密码、假统计、内存成功提示或尚无后端能力的界面控件；搜索、排序、分类和账号操作随各自垂直切片实现。
+- 故障修复：真实 Debug 启动发现 EFS AppData 中 `MoveFileExW` 返回跨卷错误；受控 API 对照证明 `MoveFileW` 可用，改用其保持目标存在时拒绝覆盖的首次发布语义。
+- 验证证据：`npm run check` 为 0 error / 0 warning；Windows 原子文件 4 项测试、应用摘要 1 项测试、Tauri command 2 项测试通过；Tauri Debug 进程持续运行且窗口响应正常；创建的 `vault.dat` 不包含明文 schema/accounts 字段。
+- 范围确认：未修改原型，未实现分类或账号操作，未执行 Release。

@@ -9,10 +9,7 @@ use std::{
 };
 
 use vault_storage::{MAX_ENVELOPE_SIZE, VaultFileError, VaultFiles};
-use windows::{
-    Win32::Storage::FileSystem::{MOVEFILE_WRITE_THROUGH, MoveFileExW},
-    core::PCWSTR,
-};
+use windows::{Win32::Storage::FileSystem::MoveFileW, core::PCWSTR};
 
 const MAIN_FILE_NAME: &str = "vault.dat";
 const TEMP_CREATE_ATTEMPTS: usize = 32;
@@ -82,11 +79,11 @@ impl VaultFiles for WindowsVaultFiles {
 
         let temp_wide = wide_path(temporary.path());
         let main_wide = wide_path(&main_path);
+        // MoveFileW 在目标存在时拒绝覆盖；真实 EFS 用户目录不兼容 MoveFileExW，不能在这里替换成后者。
         let move_result = unsafe {
-            MoveFileExW(
+            MoveFileW(
                 PCWSTR::from_raw(temp_wide.as_ptr()),
                 PCWSTR::from_raw(main_wide.as_ptr()),
-                MOVEFILE_WRITE_THROUGH,
             )
         };
         if move_result.is_err() {
