@@ -103,6 +103,37 @@
       letter-spacing: 0.02em;
     }
 
+    .category-heading {
+      display: flex;
+      height: 22px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .category-add-button {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: #72726f;
+      cursor: pointer;
+      transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    .category-add-button:hover {
+      border-color: var(--line);
+      background: var(--surface);
+      color: #30302e;
+    }
+
+    .category-add-button svg {
+      width: 13px;
+      height: 13px;
+    }
+
     .nav-list {
       display: grid;
       gap: 3px;
@@ -763,6 +794,53 @@
       font-size: 10px;
     }
 
+    .category-context-menu {
+      position: fixed;
+      z-index: 100;
+      display: grid;
+      width: 132px;
+      gap: 2px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 4px;
+      box-shadow: 0 10px 26px rgba(26, 26, 26, 0.09);
+    }
+
+    .category-context-menu[hidden] {
+      display: none;
+    }
+
+    .category-context-menu button {
+      display: flex;
+      width: 100%;
+      height: 31px;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 9px;
+      color: #4c4c49;
+      font-size: 10.5px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .category-context-menu button:hover {
+      background: #f5f5f3;
+    }
+
+    .category-context-menu button.danger {
+      color: var(--danger);
+    }
+
+    .category-context-menu svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+    }
+
     dialog {
       width: 420px;
       border: 1px solid var(--line);
@@ -771,6 +849,10 @@
       padding: 0;
       color: var(--text);
       box-shadow: var(--shadow-float);
+    }
+
+    dialog.compact-dialog {
+      width: 360px;
     }
 
     dialog::backdrop {
@@ -827,12 +909,60 @@
       box-shadow: 0 0 0 3px var(--brand-soft);
     }
 
+    .field input.invalid {
+      border-color: #d28a8a;
+      box-shadow: 0 0 0 3px #faeeee;
+    }
+
+    .field-error {
+      display: none;
+      margin: 0;
+      color: var(--danger);
+      font-size: 9.5px;
+      line-height: 1.4;
+    }
+
+    .field-error.show {
+      display: block;
+    }
+
+    .dialog-copy {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 1.7;
+    }
+
+    .dialog-copy strong {
+      color: var(--text);
+      font-weight: 620;
+    }
+
     .dialog-foot {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
       border-top: 1px solid var(--line);
       padding: 13px 18px;
+    }
+
+    .danger-button {
+      display: inline-flex;
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #913f3f;
+      border-radius: 8px;
+      background: #913f3f;
+      padding: 0 12px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 520;
+      cursor: pointer;
+    }
+
+    .danger-button:hover {
+      background: #7f3535;
     }
 
     .toast {
@@ -876,6 +1006,7 @@
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l8-8m-3 3 2 2m-5 1 2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14.5 5.5 4 4M4 20l4.5-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -906,16 +1037,18 @@
           <li><button class="nav-item active" data-filter="全部"><svg class="icon"><use href="#i-grid"/></svg>账号管理<span class="count">24</span></button></li>
           <li><button class="nav-item" data-filter="全部"><svg class="icon"><use href="#i-key"/></svg>全部账号</button></li>
           <li><button class="nav-item" data-filter="最近"><svg class="icon"><use href="#i-clock"/></svg>最近使用</button></li>
-          <li><button class="nav-item" data-filter="回收站"><svg class="icon"><use href="#i-trash"/></svg>回收站<span class="count">2</span></button></li>
         </ul>
       </nav>
 
-      <div class="nav-label">分类</div>
-      <ul class="nav-list">
-        <li><button class="nav-item" data-filter="工作"><span class="category-dot work"></span>工作<span class="count">8</span></button></li>
-        <li><button class="nav-item" data-filter="开发"><span class="category-dot dev"></span>开发<span class="count">7</span></button></li>
-        <li><button class="nav-item" data-filter="个人"><span class="category-dot personal"></span>个人<span class="count">6</span></button></li>
-        <li><button class="nav-item" data-filter="未分类"><span class="category-dot"></span>未分类<span class="count">3</span></button></li>
+      <div class="nav-label category-heading">
+        <span>分类</span>
+        <button class="category-add-button" id="openCategoryDialog" title="新建分类" aria-label="新建分类"><svg><use href="#i-plus"/></svg></button>
+      </div>
+      <ul class="nav-list" id="categoryList">
+        <li><button class="nav-item category-item" data-filter="工作" data-category-name="工作"><span class="category-dot work"></span><span class="category-name">工作</span><span class="count">8</span></button></li>
+        <li><button class="nav-item category-item" data-filter="开发" data-category-name="开发"><span class="category-dot dev"></span><span class="category-name">开发</span><span class="count">7</span></button></li>
+        <li><button class="nav-item category-item" data-filter="个人" data-category-name="个人"><span class="category-dot personal"></span><span class="category-name">个人</span><span class="count">6</span></button></li>
+        <li><button class="nav-item category-item" data-filter="未分类" data-category-name="未分类"><span class="category-dot"></span><span class="category-name">未分类</span><span class="count">3</span></button></li>
       </ul>
 
       <div class="sidebar-bottom">
@@ -949,7 +1082,7 @@
             </article>
             <article class="metric-card">
               <div class="metric-title"><svg><use href="#i-grid"/></svg>账号分类</div>
-              <div class="metric-value">4 <small>个分类</small></div>
+              <div class="metric-value"><span id="categoryMetricValue">4</span> <small>个分类</small></div>
               <p class="metric-note">工作分类中的账号最多</p>
             </article>
             <article class="metric-card">
@@ -1061,6 +1194,47 @@
     </form>
   </dialog>
 
+  <div class="category-context-menu" id="categoryContextMenu" role="menu" hidden>
+    <button type="button" id="renameCategoryAction" role="menuitem"><svg><use href="#i-edit"/></svg>重命名</button>
+    <button type="button" class="danger" id="deleteCategoryAction" role="menuitem"><svg><use href="#i-trash"/></svg>删除</button>
+  </div>
+
+  <dialog class="compact-dialog" id="categoryDialog">
+    <form id="categoryForm" novalidate>
+      <header class="dialog-head">
+        <h2 id="categoryDialogTitle">新建分类</h2>
+        <button class="icon-button" type="button" id="closeCategoryDialog" title="关闭"><svg class="button-icon"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <div class="field">
+          <label for="categoryNameInput">分类名称</label>
+          <input id="categoryNameInput" maxlength="24" placeholder="例如：工作" autocomplete="off" />
+          <p class="field-error" id="categoryNameError" role="alert"></p>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="secondary-button" type="button" id="cancelCategoryDialog">取消</button>
+        <button class="primary-button" type="submit" id="saveCategoryButton">创建分类</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="compact-dialog" id="deleteCategoryDialog">
+    <div>
+      <header class="dialog-head">
+        <h2>删除分类</h2>
+        <button class="icon-button" type="button" id="closeDeleteCategoryDialog" title="关闭"><svg class="button-icon"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <p class="dialog-copy">确定删除分类“<strong id="deleteCategoryName"></strong>”吗？删除后无法撤销。</p>
+      </div>
+      <footer class="dialog-foot">
+        <button class="secondary-button" type="button" id="cancelDeleteCategory">取消</button>
+        <button class="danger-button" type="button" id="confirmDeleteCategory">删除分类</button>
+      </footer>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast"><svg class="button-icon"><use href="#i-shield"/></svg><span>操作完成</span></div>
 
   <script>
@@ -1069,8 +1243,23 @@
     const emptyState = document.querySelector('#emptyState');
     const table = document.querySelector('#accountTable');
     const toast = document.querySelector('#toast');
-    const dialog = document.querySelector('#createDialog');
+    const accountDialog = document.querySelector('#createDialog');
+    const categoryList = document.querySelector('#categoryList');
+    const categoryMetricValue = document.querySelector('#categoryMetricValue');
+    const categoryContextMenu = document.querySelector('#categoryContextMenu');
+    const categoryDialog = document.querySelector('#categoryDialog');
+    const categoryDialogTitle = document.querySelector('#categoryDialogTitle');
+    const categoryForm = document.querySelector('#categoryForm');
+    const categoryNameInput = document.querySelector('#categoryNameInput');
+    const categoryNameError = document.querySelector('#categoryNameError');
+    const saveCategoryButton = document.querySelector('#saveCategoryButton');
+    const deleteCategoryDialog = document.querySelector('#deleteCategoryDialog');
+    const deleteCategoryName = document.querySelector('#deleteCategoryName');
     let activeFilter = '全部';
+    let categoryDialogMode = 'create';
+    let editingCategoryItem = null;
+    let contextCategoryItem = null;
+    let pendingDeleteCategoryItem = null;
 
     // 原型只做界面行为演示，不会读取或保存真实密码。
     function applyFilter() {
@@ -1079,7 +1268,7 @@
       rows.forEach((row) => {
         const matchesQuery = row.dataset.search.toLowerCase().includes(query);
         const matchesCategory = activeFilter === '全部' || activeFilter === '最近' || row.dataset.category === activeFilter;
-        const visible = matchesQuery && matchesCategory && activeFilter !== '回收站';
+        const visible = matchesQuery && matchesCategory;
         row.hidden = !visible;
         if (visible) visibleCount += 1;
       });
@@ -1094,25 +1283,256 @@
       showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 1600);
     }
 
-    searchInput.addEventListener('input', applyFilter);
+    function activateFilterItem(item) {
+      document.querySelectorAll('.nav-item[data-filter]').forEach((nav) => nav.classList.remove('active'));
+      item.classList.add('active');
+      activeFilter = item.dataset.filter;
+      applyFilter();
+    }
 
-    document.querySelectorAll('.nav-item[data-filter]').forEach((item) => {
-      item.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item[data-filter]').forEach((nav) => nav.classList.remove('active'));
-        item.classList.add('active');
-        activeFilter = item.dataset.filter;
-        applyFilter();
+    function bindFilterItem(item) {
+      item.addEventListener('click', () => activateFilterItem(item));
+    }
+
+    function getCategoryItems() {
+      return [...categoryList.querySelectorAll('.category-item')];
+    }
+
+    function getCategoryName(item) {
+      return item?.dataset.categoryName ?? '';
+    }
+
+    function getCategoryCount(item) {
+      return Number.parseInt(item?.querySelector('.count')?.textContent ?? '0', 10) || 0;
+    }
+
+    function updateCategoryMetric() {
+      categoryMetricValue.textContent = String(getCategoryItems().length);
+    }
+
+    function syncAccountCategoryOptions() {
+      const select = document.querySelector('#accountCategory');
+      const selectedName = select.value;
+      select.replaceChildren(...getCategoryItems().map((item) => {
+        const option = document.createElement('option');
+        option.value = getCategoryName(item);
+        option.textContent = getCategoryName(item);
+        return option;
+      }));
+      if ([...select.options].some((option) => option.value === selectedName)) {
+        select.value = selectedName;
+      }
+    }
+
+    function setCategoryNameError(message = '') {
+      categoryNameError.textContent = message;
+      categoryNameError.classList.toggle('show', Boolean(message));
+      categoryNameInput.classList.toggle('invalid', Boolean(message));
+    }
+
+    function validateCategoryName() {
+      const categoryName = categoryNameInput.value.trim();
+      if (!categoryName) {
+        setCategoryNameError('请输入分类名称。');
+        return null;
+      }
+
+      const normalizedName = categoryName.toLocaleLowerCase('zh-CN');
+      const hasDuplicate = getCategoryItems().some((item) => {
+        if (categoryDialogMode === 'rename' && item === editingCategoryItem) return false;
+        return getCategoryName(item).toLocaleLowerCase('zh-CN') === normalizedName;
       });
+
+      if (hasDuplicate) {
+        setCategoryNameError('分类名称已经存在，请换一个名称。');
+        return null;
+      }
+
+      setCategoryNameError();
+      return categoryName;
+    }
+
+    function openCategoryEditor(mode, item = null) {
+      categoryDialogMode = mode;
+      editingCategoryItem = item;
+      categoryDialogTitle.textContent = mode === 'create' ? '新建分类' : '重命名分类';
+      saveCategoryButton.textContent = mode === 'create' ? '创建分类' : '保存名称';
+      categoryNameInput.value = mode === 'rename' ? getCategoryName(item) : '';
+      setCategoryNameError();
+      categoryDialog.showModal();
+      window.setTimeout(() => {
+        categoryNameInput.focus();
+        if (mode === 'rename') categoryNameInput.select();
+      }, 0);
+    }
+
+    function closeCategoryEditor() {
+      categoryDialog.close();
+      categoryForm.reset();
+      editingCategoryItem = null;
+      setCategoryNameError();
+    }
+
+    function createCategoryItem(categoryName) {
+      const listItem = document.createElement('li');
+      const button = document.createElement('button');
+      const dot = document.createElement('span');
+      const name = document.createElement('span');
+      const count = document.createElement('span');
+
+      button.type = 'button';
+      button.className = 'nav-item category-item';
+      button.dataset.filter = categoryName;
+      button.dataset.categoryName = categoryName;
+      dot.className = 'category-dot';
+      name.className = 'category-name';
+      name.textContent = categoryName;
+      count.className = 'count';
+      count.textContent = '0';
+      button.append(dot, name, count);
+      listItem.append(button);
+      categoryList.append(listItem);
+      bindFilterItem(button);
+      bindCategoryContextItem(button);
+      return button;
+    }
+
+    function renameCategory(item, categoryName) {
+      const oldName = getCategoryName(item);
+      item.dataset.filter = categoryName;
+      item.dataset.categoryName = categoryName;
+      item.querySelector('.category-name').textContent = categoryName;
+
+      rows.forEach((row) => {
+        if (row.dataset.category !== oldName) return;
+        row.dataset.category = categoryName;
+        row.dataset.search = row.dataset.search.replaceAll(oldName, categoryName);
+        const badge = row.querySelector('.category-badge');
+        badge.dataset.category = categoryName;
+        badge.textContent = categoryName;
+      });
+
+      if (activeFilter === oldName) activeFilter = categoryName;
+      applyFilter();
+    }
+
+    function closeCategoryContextMenu() {
+      categoryContextMenu.hidden = true;
+    }
+
+    function openCategoryContextMenu(event, item) {
+      event.preventDefault();
+      contextCategoryItem = item;
+      categoryContextMenu.hidden = false;
+
+      const menuWidth = categoryContextMenu.offsetWidth;
+      const menuHeight = categoryContextMenu.offsetHeight;
+      const left = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
+      const top = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+      categoryContextMenu.style.left = `${Math.max(8, left)}px`;
+      categoryContextMenu.style.top = `${Math.max(8, top)}px`;
+    }
+
+    function bindCategoryContextItem(item) {
+      item.addEventListener('contextmenu', (event) => openCategoryContextMenu(event, item));
+    }
+
+    searchInput.addEventListener('input', applyFilter);
+    document.querySelectorAll('.nav-item[data-filter]').forEach(bindFilterItem);
+    getCategoryItems().forEach(bindCategoryContextItem);
+
+    document.querySelector('#openCategoryDialog').addEventListener('click', () => openCategoryEditor('create'));
+    document.querySelector('#closeCategoryDialog').addEventListener('click', closeCategoryEditor);
+    document.querySelector('#cancelCategoryDialog').addEventListener('click', closeCategoryEditor);
+    categoryNameInput.addEventListener('input', () => setCategoryNameError());
+
+    categoryForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const categoryName = validateCategoryName();
+      if (!categoryName) return;
+
+      if (categoryDialogMode === 'create') {
+        const newItem = createCategoryItem(categoryName);
+        updateCategoryMetric();
+        syncAccountCategoryOptions();
+        closeCategoryEditor();
+        activateFilterItem(newItem);
+        showToast(`分类“${categoryName}”已创建`);
+        return;
+      }
+
+      const oldName = getCategoryName(editingCategoryItem);
+      renameCategory(editingCategoryItem, categoryName);
+      syncAccountCategoryOptions();
+      closeCategoryEditor();
+      showToast(`分类“${oldName}”已重命名`);
     });
 
-    document.querySelector('#openCreateDialog').addEventListener('click', () => dialog.showModal());
+    document.querySelector('#renameCategoryAction').addEventListener('click', () => {
+      const item = contextCategoryItem;
+      closeCategoryContextMenu();
+      openCategoryEditor('rename', item);
+    });
+
+    document.querySelector('#deleteCategoryAction').addEventListener('click', () => {
+      const item = contextCategoryItem;
+      closeCategoryContextMenu();
+      const accountCount = getCategoryCount(item);
+      const categoryName = getCategoryName(item);
+
+      if (accountCount > 0) {
+        showToast(`分类“${categoryName}”中还有 ${accountCount} 个账号，不能删除`);
+        return;
+      }
+
+      pendingDeleteCategoryItem = item;
+      deleteCategoryName.textContent = categoryName;
+      deleteCategoryDialog.showModal();
+    });
+
+    function closeDeleteCategoryDialog() {
+      deleteCategoryDialog.close();
+      pendingDeleteCategoryItem = null;
+    }
+
+    document.querySelector('#closeDeleteCategoryDialog').addEventListener('click', closeDeleteCategoryDialog);
+    document.querySelector('#cancelDeleteCategory').addEventListener('click', closeDeleteCategoryDialog);
+    document.querySelector('#confirmDeleteCategory').addEventListener('click', () => {
+      if (!pendingDeleteCategoryItem) return;
+      const categoryName = getCategoryName(pendingDeleteCategoryItem);
+      const deletingActiveCategory = pendingDeleteCategoryItem.classList.contains('active');
+      pendingDeleteCategoryItem.closest('li').remove();
+      updateCategoryMetric();
+      syncAccountCategoryOptions();
+      deleteCategoryDialog.close();
+      pendingDeleteCategoryItem = null;
+      if (deletingActiveCategory) {
+        activateFilterItem(document.querySelector('.nav-item[data-filter="全部"]'));
+      }
+      showToast(`分类“${categoryName}”已删除`);
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!categoryContextMenu.hidden && !categoryContextMenu.contains(event.target)) {
+        closeCategoryContextMenu();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeCategoryContextMenu();
+    });
+
+    window.addEventListener('resize', closeCategoryContextMenu);
+    window.addEventListener('scroll', closeCategoryContextMenu, true);
+
+    document.querySelector('#openCreateDialog').addEventListener('click', () => accountDialog.showModal());
     document.querySelector('#refreshButton').addEventListener('click', () => showToast('账号列表已刷新'));
 
     document.querySelector('#createForm').addEventListener('submit', (event) => {
       if (event.submitter?.value !== 'default') return;
       event.preventDefault();
       if (!event.currentTarget.reportValidity()) return;
-      dialog.close();
+      accountDialog.close();
       event.currentTarget.reset();
       showToast('原型演示：账号已保存');
     });
