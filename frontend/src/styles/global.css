@@ -1,5 +1,9 @@
+@import url("https://cdn-font.hyperos.mi.com/font/css?family=MiSans_VF:VF:Chinese_Simplify,Latin&display=swap");
+
 :root {
-  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-latin: "Segoe UI Variable", "SF Pro Text", "Helvetica Neue";
+  --font-cjk: "MiSans VF", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI";
+  font-family: var(--font-latin), var(--font-cjk), sans-serif;
   color: #20201f;
   background: #f8f8f7;
   font-synthesis: none;
@@ -20,9 +24,16 @@ body,
   overflow: hidden;
 }
 
+body {
+  font-family: inherit;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
 button,
 input,
-select { font: inherit; }
+select,
+textarea { font: inherit; }
 
 button:disabled,
 input:disabled,
