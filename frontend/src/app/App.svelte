@@ -53,6 +53,7 @@
   let accountPasswordVisible = false;
   let accountUsernameInput: HTMLInputElement;
   let accountDraft = emptyAccountDraft();
+  let confirmedAccountDraft: ReturnType<typeof emptyAccountDraft> | null = null;
   let searchQuery = "";
   let searchResults: AccountSummary[] = [];
   let searchStatus: "idle" | "loading" | "ready" | "error" = "idle";
@@ -305,6 +306,7 @@
     accountDetailLoaded = true;
     accountLoading = false;
     accountDraft = emptyAccountDraft();
+    confirmedAccountDraft = null;
     if (selectedCategoryId && selectedCategoryId !== "uncategorized") {
       accountDraft.categoryId = selectedCategoryId;
     }
@@ -325,6 +327,7 @@
     accountDetailLoaded = false;
     accountLoading = true;
     accountDraft = emptyAccountDraft();
+    confirmedAccountDraft = null;
     accountError = "";
     accountUsernameError = "";
     accountPasswordError = "";
@@ -335,7 +338,7 @@
       const detail = await loadAccountForEdit(accountId);
       // 关闭弹框或切换目标后，迟到响应不得重新填入旧账号密码。
       if (sequence !== accountLoadSequence || !accountDialogOpen || editingAccountId !== accountId) return;
-      accountDraft = {
+      const loadedDraft = {
         username: detail.username,
         password: detail.password,
         address: detail.address ?? "",
@@ -343,6 +346,9 @@
         notes: detail.notes ?? "",
         categoryId: detail.categoryId ?? "uncategorized",
       };
+      accountDraft = loadedDraft;
+      // 保存失败时只能退回 Rust 已确认的数据，不能让未落盘的修改伪装成当前值。
+      confirmedAccountDraft = { ...loadedDraft };
       accountDetailLoaded = true;
       requestAnimationFrame(() => accountUsernameInput?.focus());
     } catch (error) {
@@ -364,6 +370,7 @@
     accountDetailLoaded = false;
     accountLoading = false;
     accountDraft = emptyAccountDraft();
+    confirmedAccountDraft = null;
     accountError = "";
     accountUsernameError = "";
     accountPasswordError = "";
@@ -405,10 +412,20 @@
       editingAccountId = null;
       accountDetailLoaded = false;
       accountDraft = emptyAccountDraft();
+      confirmedAccountDraft = null;
       showNotice(edited ? "账号修改已保存" : "账号已保存");
     } catch (error) {
       const commandError = error as Partial<CommandError> | null;
-      if (commandError?.code === "ACCOUNT_USERNAME_REQUIRED") accountUsernameError = "请输入账号名";
+      if (
+        commandError?.code === "VAULT_SAVE_FAILED" &&
+        accountDialogMode === "edit" &&
+        confirmedAccountDraft
+      ) {
+        // 编辑保存失败后恢复已确认快照；创建失败仍保留输入，方便用户直接重试。
+        accountDraft = { ...confirmedAccountDraft };
+        accountPasswordVisible = false;
+        accountError = "密码库保存失败，已恢复上一次保存的内容，请重试";
+      } else if (commandError?.code === "ACCOUNT_USERNAME_REQUIRED") accountUsernameError = "请输入账号名";
       else if (commandError?.code === "ACCOUNT_PASSWORD_REQUIRED") accountPasswordError = "请输入密码";
       else if (commandError?.code === "CATEGORY_NOT_FOUND") accountError = "所选分类不存在，请重新选择";
       else accountError = commandError?.message || "账号保存失败，请重试";
