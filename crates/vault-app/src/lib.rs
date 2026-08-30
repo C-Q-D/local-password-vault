@@ -4,8 +4,8 @@ use std::sync::Mutex;
 
 use uuid::Uuid;
 use vault_core::{
-    AccountError, CategoryError, CreateAccount, DeleteAccountError, MoveAccountError,
-    UpdateAccount, UpdateAccountError, VaultDocument,
+    AccountError, AccountSearchScope, CategoryError, CreateAccount, DeleteAccountError,
+    MoveAccountError, SearchAccountError, UpdateAccount, UpdateAccountError, VaultDocument,
 };
 use vault_storage::{OpenedVault, VaultOpenError};
 
@@ -25,6 +25,21 @@ pub struct AccountSummary {
     pub username: String,
     pub address: Option<String>,
     pub email: Option<String>,
+}
+
+/// 前端传入的搜索范围；分类 ID 仍由应用层在当前确认状态中解析和验证。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountSearchScopeInput {
+    All,
+    Uncategorized,
+    Category(String),
+}
+
+/// 只读搜索结果携带当前 revision，便于前端识别结果对应的确认快照。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountSearchSnapshot {
+    pub revision: u64,
+    pub accounts: Vec<AccountSummary>,
 }
 
 /// Tauri 传入应用层的新增账号数据；分类 ID 在当前确认快照内重新验证。
@@ -274,6 +289,42 @@ impl VaultApplication {
         })
     }
 
+    /// 在当前确认文档中执行只读搜索，不增加 revision，也不调用持久化仓储。
+    pub fn search_accounts(
+        &self,
+        query: &str,
+        scope: AccountSearchScopeInput,
+    ) -> Result<AccountSearchSnapshot, VaultApplicationError> {
+        let scope = match scope {
+            AccountSearchScopeInput::All => AccountSearchScope::All,
+            AccountSearchScopeInput::Uncategorized => AccountSearchScope::Uncategorized,
+            AccountSearchScopeInput::Category(id) => AccountSearchScope::Category(
+                Uuid::parse_str(&id).map_err(|_| VaultApplicationError::CategoryNotFound)?,
+            ),
+        };
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let accounts = state
+            .document
+            .search_accounts(query, scope)
+            .map_err(map_search_account_error)?
+            .into_iter()
+            .map(|account| AccountSummary {
+                id: account.id.to_string(),
+                category_id: account.category_id.map(|id| id.to_string()),
+                username: account.username,
+                address: account.address,
+                email: account.email,
+            })
+            .collect();
+        Ok(AccountSearchSnapshot {
+            revision: state.document.revision,
+            accounts,
+        })
+    }
+
     /// 按稳定 ID 提交字段和分类编辑；只有整份候选经磁盘确认后才替换应用快照。
     pub fn update_account(
         &self,
@@ -381,6 +432,12 @@ fn map_move_account_error(error: MoveAccountError) -> VaultApplicationError {
 fn map_delete_account_error(error: DeleteAccountError) -> VaultApplicationError {
     match error {
         DeleteAccountError::NotFound => VaultApplicationError::AccountNotFound,
+    }
+}
+
+fn map_search_account_error(error: SearchAccountError) -> VaultApplicationError {
+    match error {
+        SearchAccountError::CategoryNotFound => VaultApplicationError::CategoryNotFound,
     }
 }
 
@@ -966,5 +1023,47 @@ mod tests {
             Err(VaultApplicationError::AccountNotFound)
         );
         assert_eq!(valid_save_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn search_accounts_is_read_only_and_returns_safe_current_revision() {
+        let mut document = VaultDocument::empty();
+        document.revision = 7;
+        let category = document.create_category("工作").expect("分类应创建成功");
+        document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "目标账号".to_owned(),
+                password: "密码不可搜索".to_owned(),
+                address: None,
+                email: None,
+                notes: Some("可搜索备注".to_owned()),
+            })
+            .expect("账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+
+        let result = application
+            .search_accounts(
+                "可搜索备注",
+                AccountSearchScopeInput::Category(category.id.to_string()),
+            )
+            .expect("备注搜索应成功");
+        let password_only = application
+            .search_accounts("密码不可搜索", AccountSearchScopeInput::All)
+            .expect("密码查询应安全返回空结果");
+
+        assert_eq!(result.revision, 7);
+        assert_eq!(result.accounts.len(), 1);
+        assert_eq!(result.accounts[0].username, "目标账号");
+        assert!(password_only.accounts.is_empty());
+        assert_eq!(application.snapshot().expect("快照应可读取").revision, 7);
+        assert_eq!(save_count.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            application.search_accounts(
+                "目标",
+                AccountSearchScopeInput::Category(Uuid::new_v4().to_string())
+            ),
+            Err(VaultApplicationError::CategoryNotFound)
+        );
     }
 }

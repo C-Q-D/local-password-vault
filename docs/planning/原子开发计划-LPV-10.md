@@ -40,7 +40,7 @@
 
 ## LPV-10-02 暴露只读账号搜索命令
 
-- 状态：in_progress
+- 状态：done
 - 唯一目标：应用层、Tauri 和 TypeScript 提供 `searchAccounts(query, scope)`，返回当前 revision 和安全结果。
 - 允许修改：应用只读用例、搜索响应 DTO、Tauri command、TypeScript 调用和相关测试。
 - 明确不修改：写盘、索引缓存、Svelte 输入和密码详情接口。
@@ -52,9 +52,14 @@
 - DDD 门禁：只有直接类型和序列化测试不足以证明无密码响应时才触发。
 - 计划提交信息：`feat(app): [LPV-10-02] 暴露只读账号搜索命令`
 
+### 执行记录
+
+- 实际验证：应用层只读搜索 1 项测试、Tauri 安全 DTO 4 项测试通过；`cargo check -p local-password-vault`、`npm run check`、格式和差异检查通过。
+- DDD 结果：未再次触发。搜索响应使用独立 Rust/TypeScript 类型且 DTO 测试直接证明只包含安全列表字段。
+
 ## LPV-10-03 联动搜索框和分类范围
 
-- 状态：pending
+- 状态：in_progress
 - 唯一目标：让搜索输入和侧边栏当前范围共同驱动真实 Rust 搜索并渲染结果。
 - 允许修改：搜索状态、分类选择入口、加载/错误/无结果状态和必要样式。
 - 明确不修改：高亮、历史、高级过滤、排序和整体布局。

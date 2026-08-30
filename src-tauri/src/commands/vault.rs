@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use vault_app::{
-    AccountEditDetail, AccountSummary, CategorySummary, CreateAccountInput, UpdateAccountInput,
-    VaultApplication, VaultApplicationError, VaultSnapshot,
+    AccountEditDetail, AccountSearchScopeInput, AccountSearchSnapshot, AccountSummary,
+    CategorySummary, CreateAccountInput, UpdateAccountInput, VaultApplication,
+    VaultApplicationError, VaultSnapshot,
 };
 
 /// 分类安全摘要；账号数由 Rust 当前确认文档计算。
@@ -48,6 +49,40 @@ pub(crate) struct AccountEditDto {
     address: Option<String>,
     email: Option<String>,
     notes: Option<String>,
+}
+
+/// 搜索范围使用判别式 JSON，避免空字符串和特殊分类 ID 混用。
+#[derive(Debug, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub(crate) enum AccountSearchScopeDto {
+    All,
+    Uncategorized,
+    Category { category_id: String },
+}
+
+/// 搜索响应只包含当前 revision 和安全账号列表。
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AccountSearchSnapshotDto {
+    revision: u64,
+    accounts: Vec<AccountDto>,
+}
+
+impl From<AccountSearchSnapshot> for AccountSearchSnapshotDto {
+    fn from(snapshot: AccountSearchSnapshot) -> Self {
+        Self {
+            revision: snapshot.revision,
+            accounts: snapshot
+                .accounts
+                .into_iter()
+                .map(AccountDto::from)
+                .collect(),
+        }
+    }
 }
 
 /// 编辑请求不包含账号 ID；字段和分类由应用层一次保存。
@@ -259,6 +294,25 @@ pub(crate) fn load_account_for_edit(
 }
 
 #[tauri::command]
+pub(crate) fn search_accounts(
+    query: String,
+    scope: AccountSearchScopeDto,
+    application: State<'_, VaultApplication>,
+) -> Result<AccountSearchSnapshotDto, CommandErrorDto> {
+    let scope = match scope {
+        AccountSearchScopeDto::All => AccountSearchScopeInput::All,
+        AccountSearchScopeDto::Uncategorized => AccountSearchScopeInput::Uncategorized,
+        AccountSearchScopeDto::Category { category_id } => {
+            AccountSearchScopeInput::Category(category_id)
+        }
+    };
+    application
+        .search_accounts(&query, scope)
+        .map(AccountSearchSnapshotDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
+#[tauri::command]
 pub(crate) fn update_account(
     id: String,
     input: UpdateAccountDto,
@@ -368,5 +422,26 @@ mod tests {
         assert_eq!(dto.id, "account-id");
         assert_eq!(dto.password, "密码");
         assert_eq!(dto.notes.as_deref(), Some("备注"));
+    }
+
+    #[test]
+    fn search_snapshot_dto_contains_only_safe_account_fields() {
+        let dto = AccountSearchSnapshotDto::from(AccountSearchSnapshot {
+            revision: 4,
+            accounts: vec![AccountSummary {
+                id: "account-id".to_owned(),
+                category_id: None,
+                username: "账号".to_owned(),
+                address: None,
+                email: Some("test@example.invalid".to_owned()),
+            }],
+        });
+
+        assert_eq!(dto.revision, 4);
+        assert_eq!(dto.accounts[0].username, "账号");
+        assert_eq!(
+            dto.accounts[0].email.as_deref(),
+            Some("test@example.invalid")
+        );
     }
 }

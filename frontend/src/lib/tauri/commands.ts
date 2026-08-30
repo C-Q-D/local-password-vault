@@ -36,6 +36,16 @@ export type AccountEditDetail = {
   notes: string | null;
 };
 
+export type AccountSearchScope =
+  | { kind: "all" }
+  | { kind: "uncategorized" }
+  | { kind: "category"; categoryId: string };
+
+export type AccountSearchSnapshot = {
+  revision: number;
+  accounts: AccountSummary[];
+};
+
 export type UpdateAccountInput = CreateAccountInput;
 
 export type VaultStatus = {
@@ -82,6 +92,11 @@ export function createAccount(input: CreateAccountInput): Promise<VaultStatus> {
 /** 每次必须指定一个账号 ID，Rust 只返回该条记录的编辑字段。 */
 export function loadAccountForEdit(id: string): Promise<AccountEditDetail> {
   return invoke<AccountEditDetail>("load_account_for_edit", { id });
+}
+
+/** 搜索只返回安全账号摘要和当前 revision，不会触发密码库写入。 */
+export function searchAccounts(query: string, scope: AccountSearchScope): Promise<AccountSearchSnapshot> {
+  return invoke<AccountSearchSnapshot>("search_accounts", { query, scope });
 }
 
 /** 字段和分类归属共享一次 Rust 候选保存，账号 ID 仍由独立参数定位。 */
