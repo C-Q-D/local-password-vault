@@ -11,8 +11,8 @@ use crate::{
 /// 当前代码能够完整理解和校验的密码库结构版本。
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
-/// 多保留一天滚动窗口，前端按本地时区聚合最近七个自然日时不会遗漏最早一天。
-const USAGE_EVENT_RETENTION_MILLIS: u64 = 8 * 24 * 60 * 60 * 1_000;
+/// 比一年多保留两天，前端按本地时区聚合最近 365 个自然日时不会受时区或夏令时边界影响。
+const USAGE_EVENT_RETENTION_MILLIS: u64 = 367 * 24 * 60 * 60 * 1_000;
 
 /// 一份完整的密码库明文文档。
 ///
@@ -468,15 +468,24 @@ mod tests {
 
     #[test]
     fn record_account_usage_distinguishes_copy_kind_and_discards_expired_events() {
+        const DAY_MILLIS: u64 = 24 * 60 * 60 * 1_000;
+
         let mut document = VaultDocument::empty();
         let account = valid_account(None);
         let account_id = account.id;
         document.accounts.push(account);
-        let now = USAGE_EVENT_RETENTION_MILLIS + 10;
-        document.usage_events = vec![UsageEvent {
-            kind: UsageEventKind::AccountUse,
-            occurred_at: 9,
-        }];
+        let now = USAGE_EVENT_RETENTION_MILLIS + DAY_MILLIS;
+        let retained_at = now - 365 * DAY_MILLIS;
+        document.usage_events = vec![
+            UsageEvent {
+                kind: UsageEventKind::PasswordCopy,
+                occurred_at: now - USAGE_EVENT_RETENTION_MILLIS - 1,
+            },
+            UsageEvent {
+                kind: UsageEventKind::AccountUse,
+                occurred_at: retained_at,
+            },
+        ];
 
         document
             .record_account_used(account_id, now, UsageEventKind::PasswordCopy)
@@ -485,10 +494,16 @@ mod tests {
         assert_eq!(document.accounts[0].last_used_at, Some(now));
         assert_eq!(
             document.usage_events,
-            vec![UsageEvent {
-                kind: UsageEventKind::PasswordCopy,
-                occurred_at: now,
-            }]
+            vec![
+                UsageEvent {
+                    kind: UsageEventKind::AccountUse,
+                    occurred_at: retained_at,
+                },
+                UsageEvent {
+                    kind: UsageEventKind::PasswordCopy,
+                    occurred_at: now,
+                },
+            ]
         );
     }
 
