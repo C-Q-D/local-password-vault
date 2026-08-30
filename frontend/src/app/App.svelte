@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ArchitectureInfo from "./settings/ArchitectureInfo.svelte";
   import FontSettings from "./settings/FontSettings.svelte";
   import {
     DEFAULT_FONT_PREFERENCES,
@@ -842,7 +843,10 @@
 
       <div class="content-scroll" aria-live="polite">
         {#if activeView === "settings"}
-          <FontSettings preferences={fontPreferences} onChange={updateFontPreferences} />
+          <div class="settings-page">
+            <FontSettings preferences={fontPreferences} onChange={updateFontPreferences} />
+            <ArchitectureInfo />
+          </div>
         {:else if status === "recoveryRequired" || status === "recovering"}
           <section class="recovery-state" role="alert">
             <div class="recovery-copy">
