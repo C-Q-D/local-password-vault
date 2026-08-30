@@ -55,7 +55,7 @@
 
 ## LPV-11-02 Windows 安全写入和条件清理
 
-- 状态：pending
+- 状态：done
 - 支持的验收场景：复制密码可粘贴，并在未被用户覆盖时于 30 秒后安全清理。
 - 唯一目标：Windows 平台模块能写入普通文本或受保护密码，并使用写入凭证进行 compare-and-clear。
 - 当前行为与目标行为：`clipboard.rs` 目前只有模块说明；完成后实现 `CF_UNICODETEXT`、应用 token、系统监控排除格式和条件清理。
@@ -75,6 +75,10 @@
 - 风险等级：L3
 - DDD 门禁：实现前必须对“不会清除用户后来复制内容”的单一声明执行隔离质疑。
 - 计划提交信息：`feat(clipboard): [LPV-11-02] 实现 Windows 密码剪贴板条件清理`
+
+### 执行记录
+
+- 实际验证：DDD 隔离质疑结果为 PASS；`cargo test -p vault-platform-windows clipboard` 通过（3 项）；`cargo check -p vault-platform-windows` 通过；`cargo fmt --package vault-platform-windows -- --check` 通过。
 
 ## LPV-11-03 Tauri 凭据 command
 
