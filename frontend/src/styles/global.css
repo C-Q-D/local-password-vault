@@ -805,6 +805,8 @@ tbody tr:hover { background: #fcfcfb; }
 
 .danger-button:disabled { cursor: not-allowed; opacity: 0.58; }
 
+.account-delete-button { margin-right: auto; }
+
 .toast {
   position: fixed;
   z-index: 30;

@@ -3,6 +3,7 @@
   import {
     createAccount,
     createCategory,
+    deleteAccount,
     deleteCategory,
     loadAccountForEdit,
     loadVault,
@@ -38,6 +39,9 @@
   let accountLoading = false;
   let accountLoadSequence = 0;
   let accountSubmitting = false;
+  let pendingDeleteAccount: { id: string; username: string } | null = null;
+  let accountDeleteSubmitting = false;
+  let accountDeleteError = "";
   let accountError = "";
   let accountUsernameError = "";
   let accountPasswordError = "";
@@ -260,6 +264,39 @@
     }
   }
 
+  function requestDeleteAccount() {
+    if (accountDialogMode !== "edit" || !editingAccountId || !accountDetailLoaded) return;
+    accountDeleteError = "";
+    pendingDeleteAccount = {
+      id: editingAccountId,
+      username: accountDraft.username,
+    };
+  }
+
+  function cancelDeleteAccount() {
+    if (accountDeleteSubmitting) return;
+    pendingDeleteAccount = null;
+    accountDeleteError = "";
+  }
+
+  async function confirmDeleteAccount() {
+    if (!pendingDeleteAccount || accountDeleteSubmitting) return;
+    accountDeleteSubmitting = true;
+    accountDeleteError = "";
+    try {
+      const deletedUsername = pendingDeleteAccount.username;
+      vault = await deleteAccount(pendingDeleteAccount.id);
+      pendingDeleteAccount = null;
+      closeAccountDialog();
+      showNotice(`账号“${deletedUsername}”已删除`);
+    } catch (error) {
+      const commandError = error as Partial<CommandError> | null;
+      accountDeleteError = commandError?.message || "账号删除失败，请重试";
+    } finally {
+      accountDeleteSubmitting = false;
+    }
+  }
+
   function requestDeleteCategory(category: CategorySummary) {
     categoryMenu = null;
     if (category.accountCount > 0) {
@@ -345,7 +382,14 @@
   function handleWindowKeydown(event: KeyboardEvent) {
     if (event.key !== "Escape") return;
     categoryMenu = null;
-    if (pendingDeleteCategory) cancelDeleteCategory();
+    if (pendingDeleteAccount) {
+      cancelDeleteAccount();
+      return;
+    }
+    if (pendingDeleteCategory) {
+      cancelDeleteCategory();
+      return;
+    }
     if (categoryDialogOpen) closeCategoryDialog();
     if (accountDialogOpen) closeAccountDialog();
   }
@@ -609,10 +653,32 @@
           {#if accountError}<p class="field-error account-submit-error" role="alert">{accountError}</p>{/if}
         </div>
         <footer class="dialog-foot">
+          {#if accountDialogMode === "edit"}
+            <button class="danger-button account-delete-button" type="button" onclick={requestDeleteAccount} disabled={accountSubmitting || accountLoading || !accountDetailLoaded}>删除账号</button>
+          {/if}
           <button class="secondary-button" type="button" onclick={closeAccountDialog} disabled={accountSubmitting}>取消</button>
           <button class="primary-button" type="submit" disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)}>{accountSubmitting ? "保存中" : accountDialogMode === "edit" ? "保存修改" : "保存账号"}</button>
         </footer>
       </form>
+    </div>
+  </div>
+{/if}
+
+{#if pendingDeleteAccount}
+  <div class="dialog-backdrop" role="presentation" onclick={(event) => event.target === event.currentTarget && cancelDeleteAccount()}>
+    <div class="compact-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title" aria-describedby="delete-account-copy">
+      <header class="dialog-head">
+        <h2 id="delete-account-title">删除账号</h2>
+        <button class="dialog-close" type="button" onclick={cancelDeleteAccount} disabled={accountDeleteSubmitting} aria-label="关闭">×</button>
+      </header>
+      <div class="dialog-body">
+        <p class="dialog-copy" id="delete-account-copy">确定删除账号“<strong>{pendingDeleteAccount.username}</strong>”吗？删除后无法撤销。</p>
+        {#if accountDeleteError}<p class="field-error" role="alert">{accountDeleteError}</p>{/if}
+      </div>
+      <footer class="dialog-foot">
+        <button class="secondary-button" type="button" onclick={cancelDeleteAccount} disabled={accountDeleteSubmitting}>取消</button>
+        <button class="danger-button" type="button" onclick={confirmDeleteAccount} disabled={accountDeleteSubmitting}>{accountDeleteSubmitting ? "删除中" : "确认删除"}</button>
+      </footer>
     </div>
   </div>
 {/if}
