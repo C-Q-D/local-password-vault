@@ -43,18 +43,21 @@ fn recover_backup(
     Ok(Some(open_confirmed(&restored, key_protector, false)?))
 }
 
-/// 保存完整候选后重新读取和认证磁盘主库，只返回已经确认的文档。
+/// 先认证即将提交的完整信封，再原子替换主库并返回该确认文档。
+///
+/// `replace_main` 成功是提交点；之后不能再执行可能失败的操作，否则调用方会把已经
+/// 提交的磁盘状态误判为未提交，并继续持有旧内存快照。
 pub fn save_confirmed(
     files: &impl VaultFiles,
     key_protector: &impl KeyProtector,
     candidate: &VaultDocument,
 ) -> Result<VaultDocument, VaultOpenError> {
     let envelope = seal(candidate, key_protector).map_err(VaultOpenError::Envelope)?;
+    let confirmed = open_envelope(&envelope, key_protector).map_err(VaultOpenError::Envelope)?;
     files
         .replace_main(&envelope)
         .map_err(VaultOpenError::File)?;
-    let confirmed_envelope = files.read_main().map_err(VaultOpenError::File)?;
-    open_envelope(&confirmed_envelope, key_protector).map_err(VaultOpenError::Envelope)
+    Ok(confirmed)
 }
 
 fn initialize(
@@ -102,7 +105,6 @@ mod tests {
         main: Mutex<Option<Vec<u8>>>,
         backup: Mutex<Option<Vec<u8>>>,
         fail_replace: bool,
-        corrupt_replacement: bool,
     }
 
     impl VaultFiles for MemoryFiles {
@@ -123,11 +125,7 @@ mod tests {
             if main.is_none() {
                 return Err(VaultFileError::NotFound);
             }
-            *main = Some(if self.corrupt_replacement {
-                b"corrupted-replacement".to_vec()
-            } else {
-                candidate.to_vec()
-            });
+            *main = Some(candidate.to_vec());
             Ok(())
         }
 
@@ -239,6 +237,43 @@ mod tests {
     }
 
     #[test]
+    fn successful_commit_has_no_fallible_read_after_replacement() {
+        struct UnreadableAfterCommitFiles {
+            main: Mutex<Vec<u8>>,
+        }
+
+        impl VaultFiles for UnreadableAfterCommitFiles {
+            fn publish_initial(&self, _candidate: &[u8]) -> Result<(), VaultFileError> {
+                Err(VaultFileError::AlreadyExists)
+            }
+
+            fn replace_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+                *self.main.lock().expect("测试互斥锁不应中毒") = candidate.to_vec();
+                Ok(())
+            }
+
+            fn read_main(&self) -> Result<Vec<u8>, VaultFileError> {
+                Err(VaultFileError::Io)
+            }
+        }
+
+        let old = seal(&VaultDocument::empty(), &TestKeyProtector).expect("旧信封应生成");
+        let files = UnreadableAfterCommitFiles {
+            main: Mutex::new(old),
+        };
+        let mut candidate = VaultDocument::empty();
+        candidate.revision = 1;
+        candidate.create_category("工作").expect("分类应创建成功");
+
+        let confirmed =
+            save_confirmed(&files, &TestKeyProtector, &candidate).expect("提交后不应再依赖回读");
+
+        assert_eq!(confirmed, candidate);
+        let committed = files.main.lock().expect("测试互斥锁不应中毒").clone();
+        assert_eq!(open_envelope(&committed, &TestKeyProtector), Ok(candidate));
+    }
+
+    #[test]
     fn replace_failure_keeps_previous_main_and_does_not_return_candidate() {
         let files = MemoryFiles::default();
         open_or_initialize(&files, &TestKeyProtector).expect("应先创建主库");
@@ -247,7 +282,6 @@ mod tests {
             main: Mutex::new(Some(previous.clone())),
             backup: Mutex::new(None),
             fail_replace: true,
-            corrupt_replacement: false,
         };
         let mut candidate = VaultDocument::empty();
         candidate.revision = 1;
@@ -257,27 +291,6 @@ mod tests {
             Err(VaultOpenError::File(VaultFileError::Io))
         );
         assert_eq!(failing_files.read_main(), Ok(previous));
-    }
-
-    #[test]
-    fn corrupted_replacement_is_not_returned_as_confirmed_document() {
-        let files = MemoryFiles::default();
-        open_or_initialize(&files, &TestKeyProtector).expect("应先创建主库");
-        let corrupting_files = MemoryFiles {
-            main: Mutex::new(files.main.lock().expect("测试互斥锁不应中毒").clone()),
-            backup: Mutex::new(None),
-            fail_replace: false,
-            corrupt_replacement: true,
-        };
-
-        assert!(matches!(
-            save_confirmed(
-                &corrupting_files,
-                &TestKeyProtector,
-                &VaultDocument::empty()
-            ),
-            Err(VaultOpenError::Envelope(_))
-        ));
     }
 
     #[test]

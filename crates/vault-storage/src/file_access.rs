@@ -7,7 +7,8 @@ pub trait VaultFiles {
     /// 只在主库尚不存在时发布第一份完整加密信封。
     fn publish_initial(&self, candidate: &[u8]) -> Result<(), VaultFileError>;
 
-    /// 用完整候选替换已经存在的主库；目标不存在时不得隐式创建。
+    /// 用完整候选替换已经存在的主库；返回成功时必须已提交调用方提供的完整原字节，
+    /// 目标不存在时不得隐式创建。
     fn replace_main(&self, candidate: &[u8]) -> Result<(), VaultFileError>;
 
     /// 有界读取当前主库的完整加密信封。

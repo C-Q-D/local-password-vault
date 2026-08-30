@@ -280,6 +280,17 @@ pub(crate) fn update_account(
         .map_err(CommandErrorDto::from)
 }
 
+#[tauri::command]
+pub(crate) fn delete_account(
+    id: String,
+    application: State<'_, VaultApplication>,
+) -> Result<VaultStatusDto, CommandErrorDto> {
+    application
+        .delete_account(&id)
+        .map(VaultStatusDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -15,7 +15,8 @@ pub fn run() {
             commands::vault::delete_category,
             commands::vault::create_account,
             commands::vault::load_account_for_edit,
-            commands::vault::update_account
+            commands::vault::update_account,
+            commands::vault::delete_account
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 应用启动失败");

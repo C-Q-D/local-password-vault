@@ -4,8 +4,8 @@ use std::sync::Mutex;
 
 use uuid::Uuid;
 use vault_core::{
-    AccountError, CategoryError, CreateAccount, MoveAccountError, UpdateAccount,
-    UpdateAccountError, VaultDocument,
+    AccountError, CategoryError, CreateAccount, DeleteAccountError, MoveAccountError,
+    UpdateAccount, UpdateAccountError, VaultDocument,
 };
 use vault_storage::{OpenedVault, VaultOpenError};
 
@@ -320,6 +320,30 @@ impl VaultApplication {
         state.document = confirmed;
         Ok(snapshot_from(&state))
     }
+
+    /// 按稳定 ID 删除账号；只有磁盘确认成功后才发布不含目标账号的新快照。
+    pub fn delete_account(&self, id: &str) -> Result<VaultSnapshot, VaultApplicationError> {
+        let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let mut candidate = state.document.clone();
+        candidate
+            .delete_account(account_id)
+            .map_err(map_delete_account_error)?;
+        candidate.revision = candidate
+            .revision
+            .checked_add(1)
+            .ok_or(VaultApplicationError::VaultSaveFailed)?;
+
+        let confirmed = self
+            .repository
+            .save_confirmed(&candidate)
+            .map_err(|_| VaultApplicationError::VaultSaveFailed)?;
+        state.document = confirmed;
+        Ok(snapshot_from(&state))
+    }
 }
 
 fn map_category_error(error: CategoryError) -> VaultApplicationError {
@@ -351,6 +375,12 @@ fn map_move_account_error(error: MoveAccountError) -> VaultApplicationError {
     match error {
         MoveAccountError::AccountNotFound => VaultApplicationError::AccountNotFound,
         MoveAccountError::CategoryNotFound => VaultApplicationError::CategoryNotFound,
+    }
+}
+
+fn map_delete_account_error(error: DeleteAccountError) -> VaultApplicationError {
+    match error {
+        DeleteAccountError::NotFound => VaultApplicationError::AccountNotFound,
     }
 }
 
@@ -868,5 +898,73 @@ mod tests {
         assert_eq!(updated.uncategorized_count, 1);
         assert_eq!(updated.accounts[0].category_id, None);
         assert_eq!(save_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn delete_account_publishes_once_and_updates_category_count() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let target = document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "待删除账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: Some("https://same.invalid".to_owned()),
+                email: None,
+                notes: None,
+            })
+            .expect("目标账号应创建成功");
+        let retained = document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "保留账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: Some("https://same.invalid".to_owned()),
+                email: None,
+                notes: None,
+            })
+            .expect("同地址账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+
+        let deleted = application
+            .delete_account(&target.id.to_string())
+            .expect("目标账号应删除成功");
+
+        assert_eq!(deleted.revision, 1);
+        assert_eq!(deleted.account_count, 1);
+        assert_eq!(deleted.categories[0].account_count, 1);
+        assert_eq!(deleted.accounts[0].id, retained.id.to_string());
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn delete_account_failure_keeps_confirmed_snapshot() {
+        let mut document = VaultDocument::empty();
+        let target = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "保留账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("账号应创建成功");
+        let (application, _, save_count) = application_with_document(true, document.clone());
+        let before = application.snapshot().expect("旧快照应可读取");
+
+        assert_eq!(
+            application.delete_account(&target.id.to_string()),
+            Err(VaultApplicationError::VaultSaveFailed)
+        );
+        assert_eq!(application.snapshot().expect("旧快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+
+        let (valid, _, valid_save_count) = application_with_document(false, document);
+        assert_eq!(
+            valid.delete_account("invalid-id"),
+            Err(VaultApplicationError::AccountNotFound)
+        );
+        assert_eq!(valid_save_count.load(Ordering::SeqCst), 0);
     }
 }

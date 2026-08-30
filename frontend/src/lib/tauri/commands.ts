@@ -88,3 +88,8 @@ export function loadAccountForEdit(id: string): Promise<AccountEditDetail> {
 export function updateAccount(id: string, input: UpdateAccountInput): Promise<VaultStatus> {
   return invoke<VaultStatus>("update_account", { id, input });
 }
+
+/** 删除只提交稳定账号 ID，成功响应仍是不含密码的最新列表快照。 */
+export function deleteAccount(id: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("delete_account", { id });
+}
