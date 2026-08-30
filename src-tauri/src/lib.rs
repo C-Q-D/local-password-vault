@@ -1,4 +1,6 @@
 mod commands;
+#[cfg(target_os = "windows")]
+mod password_clear_scheduler;
 
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -29,6 +31,7 @@ pub fn run() {
 
 #[cfg(target_os = "windows")]
 fn setup_windows(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::password_clear_scheduler::PasswordClearScheduler;
     use tauri::Manager;
     use vault_app::{VaultApplication, VaultRepository};
     use vault_core::VaultDocument;
@@ -72,6 +75,8 @@ fn setup_windows(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         .ok_or("找不到主窗口，无法初始化剪贴板")?;
     let owner_hwnd = main_window.hwnd()?.0 as isize;
     app.manage(WindowsClipboard::new(owner_hwnd)?);
+    // 全程序只创建一个密码清理工作线程，连续复制不会线性增加休眠线程。
+    app.manage(PasswordClearScheduler::new()?);
     app.manage(VaultApplication::from_startup(
         instance_guard,
         startup,

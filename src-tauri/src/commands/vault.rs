@@ -8,17 +8,13 @@ use vault_app::{
 use vault_core::UsageEventKind;
 
 #[cfg(target_os = "windows")]
-use std::{
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use crate::password_clear_scheduler::PasswordClearScheduler;
+#[cfg(target_os = "windows")]
+use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "windows")]
 use vault_platform_windows::clipboard::{ClipboardError, WindowsClipboard};
 #[cfg(target_os = "windows")]
 use zeroize::Zeroizing;
-
-#[cfg(target_os = "windows")]
-const PASSWORD_CLEAR_DELAY: Duration = Duration::from_secs(30);
 
 /// 分类安全摘要；账号数由 Rust 当前确认文档计算。
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -450,6 +446,7 @@ pub(crate) fn copy_account_password(
     id: String,
     application: State<'_, VaultApplication>,
     clipboard: State<'_, WindowsClipboard>,
+    clear_scheduler: State<'_, PasswordClearScheduler>,
 ) -> Result<VaultStatusDto, CommandErrorDto> {
     let password = Zeroizing::new(
         application
@@ -460,11 +457,12 @@ pub(crate) fn copy_account_password(
         .copy_password(&password)
         .map_err(CommandErrorDto::from)?;
 
-    // 延迟任务只持有 Rust 清理凭证；command 立即返回，绝不把密码或 token 发给 WebView。
-    thread::spawn(move || {
-        thread::sleep(PASSWORD_CLEAR_DELAY);
+    // 调度器只持有 Rust 清理凭证；单一后台线程等待时，command 可立即返回。
+    clear_scheduler.schedule(receipt).map_err(|receipt| {
+        // 调度线程异常退出时立即尝试安全清理，避免密码无限期留在剪贴板。
         let _ = receipt.clear_if_owned();
-    });
+        CommandErrorDto::from(ClipboardError::WriteFailed)
+    })?;
     application
         .record_account_used(&id, unix_time_millis(), UsageEventKind::PasswordCopy)
         .map(VaultStatusDto::from)
