@@ -533,8 +533,16 @@ h1 {
   vector-effect: non-scaling-stroke;
 }
 
-.usage-line.account { stroke: #6a66b5; }
-.usage-line.password { stroke: #d75c5c; }
+.usage-line.account {
+  stroke: #6a66b5;
+  stroke-width: 3;
+}
+
+/* 两组数值相同时用虚实线区分，避免后绘制的密码折线完全遮住账号折线。 */
+.usage-line.password {
+  stroke: #d75c5c;
+  stroke-dasharray: 7 5;
+}
 
 .usage-marker {
   stroke: #fff;
@@ -633,13 +641,12 @@ h1 {
 }
 
 .overview-foot i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #6a66b5;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid #6a66b5;
 }
 
-.overview-foot i.password { background: #d75c5c; }
+.overview-foot i.password { border-top: 2px dashed #d75c5c; }
 
 .table-heading { align-items: center; }
 
