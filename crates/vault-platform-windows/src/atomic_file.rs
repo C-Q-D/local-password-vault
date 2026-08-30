@@ -10,10 +10,11 @@ use std::{
 
 use vault_storage::{MAX_ENVELOPE_SIZE, VaultFileError, VaultFiles};
 use windows::{
+    Win32::Foundation::ERROR_UNABLE_TO_MOVE_REPLACEMENT_2,
     Win32::Storage::FileSystem::{
         FileEncryptionStatusW, MoveFileW, REPLACE_FILE_FLAGS, ReplaceFileW,
     },
-    core::PCWSTR,
+    core::{HRESULT, PCWSTR},
 };
 
 const MAIN_FILE_NAME: &str = "vault.dat";
@@ -144,18 +145,29 @@ impl VaultFiles for WindowsVaultFiles {
 
         let main_wide = wide_path(&main_path);
         let temp_wide = wide_path(temporary.path());
+        let backup_path = self.backup_path();
+        let backup_wide = wide_path(&backup_path);
         let replace_result = unsafe {
             ReplaceFileW(
                 PCWSTR::from_raw(main_wide.as_ptr()),
                 PCWSTR::from_raw(temp_wide.as_ptr()),
-                PCWSTR::null(),
+                PCWSTR::from_raw(backup_wide.as_ptr()),
                 REPLACE_FILE_FLAGS(0),
                 None,
                 None,
             )
         };
         if let Err(error) = replace_result {
-            log_windows_error("replace_main", error.code().0 as u32);
+            let code = if error.code() == HRESULT::from_win32(ERROR_UNABLE_TO_MOVE_REPLACEMENT_2.0)
+            {
+                ERROR_UNABLE_TO_MOVE_REPLACEMENT_2.0
+            } else {
+                error.code().0 as u32
+            };
+            log_windows_error("replace_main", code);
+            if let Err(recovery_error) = recover_replaced_main(code, &main_path, &backup_path) {
+                log_io_error("recover_replaced_main", &recovery_error);
+            }
             return Err(VaultFileError::Io);
         }
 
@@ -171,6 +183,27 @@ impl VaultFiles for WindowsVaultFiles {
         validate_candidate(candidate)?;
         write_synced(&self.main_path(), candidate, true, "restore_main")
     }
+}
+
+/// 1177 表示旧主库已被改名到 backup，而候选仍停留在临时名；只恢复缺失的 main。
+fn recover_replaced_main(error_code: u32, main: &Path, backup: &Path) -> io::Result<bool> {
+    if error_code != ERROR_UNABLE_TO_MOVE_REPLACEMENT_2.0 {
+        return Ok(false);
+    }
+    if main.try_exists()? || !backup.try_exists()? {
+        return Err(io::Error::other("1177 文件状态与恢复前置条件不一致"));
+    }
+
+    let backup_wide = wide_path(backup);
+    let main_wide = wide_path(main);
+    unsafe {
+        MoveFileW(
+            PCWSTR::from_raw(backup_wide.as_ptr()),
+            PCWSTR::from_raw(main_wide.as_ptr()),
+        )
+    }
+    .map_err(|error| io::Error::from_raw_os_error(error.code().0))?;
+    Ok(true)
 }
 
 fn encryption_status(path: &Path) -> Result<u32, VaultFileError> {
@@ -337,6 +370,74 @@ mod tests {
         files.replace_main(b"new").expect("已有主库应能替换");
 
         assert_eq!(files.read_main(), Ok(b"new".to_vec()));
+        assert_eq!(files.read_backup(), Ok(b"old".to_vec()));
+    }
+
+    #[test]
+    fn repeated_replacement_keeps_the_immediately_previous_main_as_backup() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let files = WindowsVaultFiles::new(directory.path());
+        files.publish_initial(b"first").expect("第一次发布应成功");
+        files.replace_main(b"second").expect("第一次替换应成功");
+
+        files
+            .replace_main(b"third")
+            .expect("已有备份时仍应替换成功");
+
+        assert_eq!(files.read_main(), Ok(b"third".to_vec()));
+        assert_eq!(files.read_backup(), Ok(b"second".to_vec()));
+    }
+
+    #[test]
+    fn error_1177_layout_restores_old_backup_without_publishing_candidate() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let main = directory.path().join(MAIN_FILE_NAME);
+        let backup = directory.path().join(BACKUP_FILE_NAME);
+        let candidate = directory.path().join("owned-candidate.tmp");
+        fs::write(&backup, b"old-main").expect("应能模拟已改名的旧主库");
+        fs::write(&candidate, b"new-candidate").expect("应能模拟仍在原名的候选");
+
+        assert!(
+            recover_replaced_main(ERROR_UNABLE_TO_MOVE_REPLACEMENT_2.0, &main, &backup)
+                .expect("1177 布局应恢复成功")
+        );
+        assert_eq!(fs::read(&main).expect("应能读取恢复主库"), b"old-main");
+        assert!(!backup.exists());
+        assert_eq!(
+            fs::read(&candidate).expect("候选应仍停留在临时名"),
+            b"new-candidate"
+        );
+    }
+
+    #[test]
+    fn non_1177_error_does_not_move_backup_or_overwrite_main() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let main = directory.path().join(MAIN_FILE_NAME);
+        let backup = directory.path().join(BACKUP_FILE_NAME);
+        fs::write(&main, b"current-main").expect("应能创建当前主库");
+        fs::write(&backup, b"previous-main").expect("应能创建已有备份");
+
+        assert!(!recover_replaced_main(5, &main, &backup).expect("非 1177 不应恢复"));
+        assert_eq!(fs::read(&main).expect("当前主库应保持"), b"current-main");
+        assert_eq!(fs::read(&backup).expect("已有备份应保持"), b"previous-main");
+    }
+
+    #[test]
+    fn error_1177_never_overwrites_an_existing_main() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let main = directory.path().join(MAIN_FILE_NAME);
+        let backup = directory.path().join(BACKUP_FILE_NAME);
+        fs::write(&main, b"existing-main").expect("应能创建现有主库");
+        fs::write(&backup, b"old-main").expect("应能创建旧备份");
+
+        assert!(
+            recover_replaced_main(ERROR_UNABLE_TO_MOVE_REPLACEMENT_2.0, &main, &backup).is_err()
+        );
+        assert_eq!(
+            fs::read(&main).expect("现有主库不得被覆盖"),
+            b"existing-main"
+        );
+        assert_eq!(fs::read(&backup).expect("备份不得被移动"), b"old-main");
     }
 
     #[test]
