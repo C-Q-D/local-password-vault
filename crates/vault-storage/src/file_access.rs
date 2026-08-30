@@ -19,7 +19,7 @@ pub trait VaultFiles {
         Err(VaultFileError::NotFound)
     }
 
-    /// 用已经认证的备份恢复主库。
+    /// 用已经认证的完整备份字节恢复主库；平台实现必须保持固定备份只读。
     fn restore_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
         self.replace_main(candidate)
     }

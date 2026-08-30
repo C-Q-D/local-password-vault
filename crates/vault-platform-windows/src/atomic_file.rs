@@ -55,6 +55,20 @@ impl WindowsVaultFiles {
         }
         Err(VaultFileError::Io)
     }
+
+    fn unique_incident_path(&self) -> Result<PathBuf, VaultFileError> {
+        for _ in 0..TEMP_CREATE_ATTEMPTS {
+            let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = self.root.join(format!(
+                ".vault-incident-{}-{sequence}.dat",
+                std::process::id()
+            ));
+            if !path.try_exists().map_err(|_| VaultFileError::Io)? {
+                return Ok(path);
+            }
+        }
+        Err(VaultFileError::Io)
+    }
 }
 
 impl VaultFiles for WindowsVaultFiles {
@@ -181,7 +195,58 @@ impl VaultFiles for WindowsVaultFiles {
 
     fn restore_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
         validate_candidate(candidate)?;
-        write_synced(&self.main_path(), candidate, true, "restore_main")
+        fs::create_dir_all(&self.root).map_err(|_| VaultFileError::Io)?;
+
+        let mut temporary = self.create_owned_temp()?;
+        temporary
+            .file_mut()
+            .write_all(candidate)
+            .map_err(|_| VaultFileError::Io)?;
+        temporary
+            .file_mut()
+            .sync_all()
+            .map_err(|_| VaultFileError::Io)?;
+        temporary.close();
+        // 发布前核对临时文件的完整字节；加密认证由 storage 在调用前后各执行一次。
+        if read_bounded(temporary.path(), "verify_restore_temp")? != candidate {
+            return Err(VaultFileError::Io);
+        }
+
+        let main_path = self.main_path();
+        let temp_wide = wide_path(temporary.path());
+        let main_wide = wide_path(&main_path);
+        if !main_path.try_exists().map_err(|_| VaultFileError::Io)? {
+            unsafe {
+                MoveFileW(
+                    PCWSTR::from_raw(temp_wide.as_ptr()),
+                    PCWSTR::from_raw(main_wide.as_ptr()),
+                )
+            }
+            .map_err(|error| {
+                log_windows_error("restore_missing_main", error.code().0 as u32);
+                VaultFileError::Io
+            })?;
+        } else {
+            let incident_path = self.unique_incident_path()?;
+            let incident_wide = wide_path(&incident_path);
+            unsafe {
+                ReplaceFileW(
+                    PCWSTR::from_raw(main_wide.as_ptr()),
+                    PCWSTR::from_raw(temp_wide.as_ptr()),
+                    PCWSTR::from_raw(incident_wide.as_ptr()),
+                    REPLACE_FILE_FLAGS(0),
+                    None,
+                    None,
+                )
+            }
+            .map_err(|error| {
+                log_windows_error("restore_existing_main", error.code().0 as u32);
+                VaultFileError::Io
+            })?;
+        }
+
+        temporary.mark_published();
+        Ok(())
     }
 }
 
@@ -479,5 +544,61 @@ mod tests {
 
         assert_eq!(files.publish_initial(b"candidate"), Err(VaultFileError::Io));
         assert!(!root_as_file.join(MAIN_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn restore_missing_main_keeps_fixed_backup_unchanged() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let files = WindowsVaultFiles::new(directory.path());
+        fs::write(files.backup_path(), b"authenticated-backup").expect("应能创建隔离备份");
+
+        files
+            .restore_main(b"authenticated-backup")
+            .expect("缺失主库应能恢复");
+
+        assert_eq!(files.read_main(), Ok(b"authenticated-backup".to_vec()));
+        assert_eq!(files.read_backup(), Ok(b"authenticated-backup".to_vec()));
+    }
+
+    #[test]
+    fn restore_existing_main_preserves_backup_and_damaged_incident() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let files = WindowsVaultFiles::new(directory.path());
+        fs::write(files.main_path(), b"damaged-main").expect("应能创建损坏主库");
+        fs::write(files.backup_path(), b"authenticated-backup").expect("应能创建隔离备份");
+
+        files
+            .restore_main(b"authenticated-backup")
+            .expect("已有损坏主库应能恢复");
+
+        assert_eq!(files.read_main(), Ok(b"authenticated-backup".to_vec()));
+        assert_eq!(files.read_backup(), Ok(b"authenticated-backup".to_vec()));
+        let incidents = fs::read_dir(directory.path())
+            .expect("应能读取隔离目录")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".vault-incident-")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(incidents.len(), 1);
+        assert_eq!(
+            fs::read(incidents[0].path()).expect("应能读取损坏现场"),
+            b"damaged-main"
+        );
+    }
+
+    #[test]
+    fn invalid_restore_candidate_does_not_touch_main_or_backup() {
+        let directory = tempfile::tempdir().expect("应能创建隔离测试目录");
+        let files = WindowsVaultFiles::new(directory.path());
+        fs::write(files.main_path(), b"damaged-main").expect("应能创建损坏主库");
+        fs::write(files.backup_path(), b"authenticated-backup").expect("应能创建隔离备份");
+
+        assert_eq!(files.restore_main(&[]), Err(VaultFileError::EmptyCandidate));
+        assert_eq!(files.read_main(), Ok(b"damaged-main".to_vec()));
+        assert_eq!(files.read_backup(), Ok(b"authenticated-backup".to_vec()));
     }
 }
