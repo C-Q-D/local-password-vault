@@ -245,8 +245,11 @@
     if (searchQuery.trim()) void runSearch();
   }
 
-  /** 通过参数让 Svelte 明确追踪搜索结果，Rust 返回后列表才能立即重新渲染。 */
-  function visibleAccounts(currentSearchResults: AccountSummary[]): AccountSummary[] {
+  /** 通过参数让 Svelte 明确追踪搜索结果和排序值，两者变化后列表都立即重新渲染。 */
+  function visibleAccounts(
+    currentSearchResults: AccountSummary[],
+    sortDirection: "recent" | "earliest",
+  ): AccountSummary[] {
     const accounts = searchQuery.trim()
       ? currentSearchResults
       : selectedCategoryId === null
@@ -264,7 +267,7 @@
         if (leftTime === null && rightTime === null) return left.index - right.index;
         if (leftTime === null) return 1;
         if (rightTime === null) return -1;
-        const difference = accountSort === "recent" ? rightTime - leftTime : leftTime - rightTime;
+        const difference = sortDirection === "recent" ? rightTime - leftTime : leftTime - rightTime;
         return difference || left.index - right.index;
       })
       .map(({ account }) => account);
@@ -956,7 +959,7 @@
             <div class="panel-head table-heading">
               <div>
                 <h2>{selectedViewName()}</h2>
-                <p>{searchQuery.trim() ? `${visibleAccounts(searchResults).length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
+                <p>{searchQuery.trim() ? `${visibleAccounts(searchResults, accountSort).length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
               </div>
               <label class="sort-control">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6M4 5v14" /></svg>
@@ -979,9 +982,9 @@
                     <th aria-label="操作"></th>
                   </tr>
                 </thead>
-                {#if visibleAccounts(searchResults).length > 0}
+                {#if visibleAccounts(searchResults, accountSort).length > 0}
                   <tbody>
-                    {#each visibleAccounts(searchResults) as account (account.id)}
+                    {#each visibleAccounts(searchResults, accountSort) as account (account.id)}
                       <tr class="account-row" role="button" tabindex="0" onclick={(event) => openAccountFromRow(event, account.id)} onkeydown={(event) => openAccountFromRowKey(event, account.id)}>
                         <td><strong class="account-name">{account.username}</strong></td>
                         <td title={account.address ?? ""}>{account.address || "—"}</td>
@@ -1031,7 +1034,7 @@
                   </tbody>
                 {/if}
               </table>
-              {#if visibleAccounts(searchResults).length === 0}
+              {#if visibleAccounts(searchResults, accountSort).length === 0}
                 <div class="empty-state">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
                   <strong>{searchStatus === "loading" ? "正在搜索账号" : searchStatus === "error" ? "搜索失败" : searchQuery.trim() ? "没有匹配账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
