@@ -65,14 +65,37 @@ export type VaultStatus = {
   accounts: AccountSummary[];
 };
 
+/** 启动判别联合只在 Ready 分支携带安全摘要。 */
+export type VaultLoadState =
+  | { status: "ready"; vault: VaultStatus }
+  | { status: "recoveryRequired" }
+  | { status: "unavailable" };
+
 export type CommandError = {
   code: string;
   message: string;
 };
 
 /** 所有 Tauri command 名称集中在这一层，组件不直接拼写 IPC 协议。 */
-export function loadVault(): Promise<VaultStatus> {
-  return invoke<VaultStatus>("load_vault");
+export function loadVaultState(): Promise<VaultLoadState> {
+  return invoke<VaultLoadState>("load_vault");
+}
+
+/** 在恢复界面接入前保留 Ready 调用契约，非 Ready 状态不会伪装成空库。 */
+export async function loadVault(): Promise<VaultStatus> {
+  const state = await loadVaultState();
+  if (state.status === "ready") return state.vault;
+  throw {
+    code: state.status === "recoveryRequired" ? "RECOVERY_REQUIRED" : "VAULT_UNAVAILABLE",
+    message: state.status === "recoveryRequired"
+      ? "密码库需要确认后从上一版备份恢复"
+      : "主密码库和备份都不可用",
+  } satisfies CommandError;
+}
+
+/** 恢复命令不接收路径，固定备份和数据根完全由 Rust 决定。 */
+export function recoverFromBackup(): Promise<VaultStatus> {
+  return invoke<VaultStatus>("recover_from_backup");
 }
 
 /** 创建分类只提交名称，成功结果始终是 Rust 从磁盘确认后的最新快照。 */

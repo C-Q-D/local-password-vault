@@ -10,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::experiment::check_stack,
             commands::vault::load_vault,
+            commands::vault::recover_from_backup,
             commands::vault::create_category,
             commands::vault::rename_category,
             commands::vault::delete_category,
@@ -35,7 +36,10 @@ fn setup_windows(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         atomic_file::WindowsVaultFiles, clipboard::WindowsClipboard, dpapi::DpapiKeyProtector,
         process_lock::ProcessLockGuard,
     };
-    use vault_storage::{VaultOpenError, open_or_initialize, save_confirmed};
+    use vault_storage::{
+        OpenedVault, VaultOpenError, VaultStartup, probe_or_initialize, recover_from_backup,
+        save_confirmed,
+    };
 
     /// 把 Windows 文件与 DPAPI 组合成应用层所需的最小持久化端口。
     struct WindowsVaultRepository {
@@ -49,21 +53,28 @@ fn setup_windows(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         ) -> Result<VaultDocument, VaultOpenError> {
             save_confirmed(&self.files, &DpapiKeyProtector, candidate)
         }
+
+        fn recover_from_backup(&self) -> Result<OpenedVault, VaultOpenError> {
+            recover_from_backup(&self.files, &DpapiKeyProtector)
+        }
     }
 
     let data_root = app.path().app_data_dir()?;
     // 锁必须先于任何密码库读取取得，并由下方应用状态持有到进程退出。
     let instance_guard = ProcessLockGuard::acquire(&data_root)?;
     let files = WindowsVaultFiles::new(&data_root);
-    let opened_vault = open_or_initialize(&files, &DpapiKeyProtector)?;
+    let startup = probe_or_initialize(&files, &DpapiKeyProtector).unwrap_or_else(|_| {
+        eprintln!("[local-password-vault] operation=probe_vault result=unavailable");
+        VaultStartup::Unavailable
+    });
     let main_window = app
         .get_webview_window("main")
         .ok_or("找不到主窗口，无法初始化剪贴板")?;
     let owner_hwnd = main_window.hwnd()?.0 as isize;
     app.manage(WindowsClipboard::new(owner_hwnd)?);
-    app.manage(VaultApplication::new(
+    app.manage(VaultApplication::from_startup(
         instance_guard,
-        opened_vault,
+        startup,
         WindowsVaultRepository { files },
     ));
     Ok(())

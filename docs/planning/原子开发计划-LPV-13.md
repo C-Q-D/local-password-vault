@@ -76,7 +76,7 @@
 
 ## LPV-13-03 暴露恢复状态与确认命令
 
-- 状态：pending
+- 状态：done
 - 支持的验收场景：应用启动后能返回 Ready/RecoveryRequired/Unavailable；只有恢复确认 command 能从待恢复转为 Ready。
 - 唯一目标：建立 Rust 应用状态、Tauri command 与 TypeScript 的恢复协议。
 - 当前行为与目标行为：应用和 IPC 只能表达 Ready 快照；完成后启动失败不会退出进程，所有非 Ready 业务操作被拒绝，显式恢复成功才发布快照。
@@ -96,6 +96,10 @@
 - 风险等级：L3。
 - DDD 门禁：实现前隔离审查“没有显式 recover command 时 RecoveryRequired 状态绝不写 main/backup”。
 - 计划提交信息：`feat(app): [LPV-13-03] 暴露备份恢复命令`。
+
+### 执行记录
+
+- 实际验证：DDD 提交前隔离审查 PASS；26 项 `vault-app` 测试全部通过，其中 4 项覆盖待恢复只读、显式成功、失败保持和不可用拒绝；8 项 Tauri command/DTO 测试通过；受影响 Crate check、`svelte-check`（0 error、0 warning）、格式和 diff 检查通过；Tauri Debug 增量编译后重新运行成功。
 
 ## LPV-13-04 显示恢复确认与不可编辑状态
 

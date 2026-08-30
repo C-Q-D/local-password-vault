@@ -3,7 +3,7 @@ use tauri::State;
 use vault_app::{
     AccountEditDetail, AccountSearchScopeInput, AccountSearchSnapshot, AccountSummary,
     CategorySummary, CreateAccountInput, CredentialField, UpdateAccountInput, VaultApplication,
-    VaultApplicationError, VaultSnapshot,
+    VaultApplicationError, VaultApplicationStatus, VaultSnapshot,
 };
 
 #[cfg(target_os = "windows")]
@@ -155,6 +155,27 @@ impl From<VaultSnapshot> for VaultStatusDto {
     }
 }
 
+/// 启动响应是判别联合；非 Ready 分支不携带密码库摘要。
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub(crate) enum VaultLoadDto {
+    Ready { vault: VaultStatusDto },
+    RecoveryRequired,
+    Unavailable,
+}
+
+impl From<VaultApplicationStatus> for VaultLoadDto {
+    fn from(status: VaultApplicationStatus) -> Self {
+        match status {
+            VaultApplicationStatus::Ready(snapshot) => Self::Ready {
+                vault: VaultStatusDto::from(snapshot),
+            },
+            VaultApplicationStatus::RecoveryRequired => Self::RecoveryRequired,
+            VaultApplicationStatus::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
 impl From<AccountSummary> for AccountDto {
     fn from(account: AccountSummary) -> Self {
         Self {
@@ -234,6 +255,18 @@ impl From<VaultApplicationError> for CommandErrorDto {
                 code: "VAULT_SAVE_FAILED",
                 message: "密码库保存失败，请重试",
             },
+            VaultApplicationError::RecoveryNotAvailable => Self {
+                code: "RECOVERY_NOT_AVAILABLE",
+                message: "当前密码库状态不能执行恢复",
+            },
+            VaultApplicationError::RecoveryFailed => Self {
+                code: "RECOVERY_FAILED",
+                message: "备份恢复失败，密码库仍保持不可编辑",
+            },
+            VaultApplicationError::VaultUnavailable => Self {
+                code: "VAULT_UNAVAILABLE",
+                message: "密码库当前不可编辑",
+            },
             VaultApplicationError::StateUnavailable => Self {
                 code: "VAULT_STATE_UNAVAILABLE",
                 message: "密码库状态暂时不可用",
@@ -267,9 +300,19 @@ impl From<ClipboardError> for CommandErrorDto {
 #[tauri::command]
 pub(crate) fn load_vault(
     application: State<'_, VaultApplication>,
+) -> Result<VaultLoadDto, CommandErrorDto> {
+    application
+        .status()
+        .map(VaultLoadDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
+#[tauri::command]
+pub(crate) fn recover_from_backup(
+    application: State<'_, VaultApplication>,
 ) -> Result<VaultStatusDto, CommandErrorDto> {
     application
-        .snapshot()
+        .recover_from_backup()
         .map(VaultStatusDto::from)
         .map_err(CommandErrorDto::from)
 }
@@ -542,6 +585,26 @@ mod tests {
         assert_eq!(
             CommandErrorDto::from(VaultApplicationError::AccountNotFound).code,
             "ACCOUNT_NOT_FOUND"
+        );
+        assert_eq!(
+            CommandErrorDto::from(VaultApplicationError::RecoveryFailed).code,
+            "RECOVERY_FAILED"
+        );
+        assert_eq!(
+            CommandErrorDto::from(VaultApplicationError::VaultUnavailable).code,
+            "VAULT_UNAVAILABLE"
+        );
+    }
+
+    #[test]
+    fn non_ready_load_dto_contains_no_vault_snapshot() {
+        assert_eq!(
+            VaultLoadDto::from(VaultApplicationStatus::RecoveryRequired),
+            VaultLoadDto::RecoveryRequired
+        );
+        assert_eq!(
+            VaultLoadDto::from(VaultApplicationStatus::Unavailable),
+            VaultLoadDto::Unavailable
         );
     }
 

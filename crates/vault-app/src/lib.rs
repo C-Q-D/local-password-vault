@@ -7,7 +7,7 @@ use vault_core::{
     AccountError, AccountSearchScope, CategoryError, CreateAccount, DeleteAccountError,
     MoveAccountError, SearchAccountError, UpdateAccount, UpdateAccountError, VaultDocument,
 };
-use vault_storage::{OpenedVault, VaultOpenError};
+use vault_storage::{OpenedVault, VaultOpenError, VaultStartup};
 
 /// 分类在前端可见的安全摘要，不包含任何账号字段或密码。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,9 +97,11 @@ pub struct VaultSnapshot {
     pub accounts: Vec<AccountSummary>,
 }
 
-/// 应用层只依赖“保存后返回磁盘确认文档”这一条最小持久化能力。
+/// 应用层只依赖保存确认和固定备份恢复，不接触平台路径或文件原语。
 pub trait VaultRepository: Send + Sync {
     fn save_confirmed(&self, candidate: &VaultDocument) -> Result<VaultDocument, VaultOpenError>;
+
+    fn recover_from_backup(&self) -> Result<OpenedVault, VaultOpenError>;
 }
 
 /// 分类用例向 Tauri 暴露的稳定错误，不携带用户输入或本地路径。
@@ -113,6 +115,9 @@ pub enum VaultApplicationError {
     AccountPasswordRequired,
     AccountNotFound,
     VaultSaveFailed,
+    RecoveryNotAvailable,
+    RecoveryFailed,
+    VaultUnavailable,
     StateUnavailable,
 }
 
@@ -121,12 +126,46 @@ struct ConfirmedState {
     initialized: bool,
 }
 
+enum ApplicationState {
+    Ready(ConfirmedState),
+    RecoveryRequired,
+    Unavailable,
+}
+
+impl ApplicationState {
+    fn confirmed(&self) -> Result<&ConfirmedState, VaultApplicationError> {
+        match self {
+            Self::Ready(state) => Ok(state),
+            Self::RecoveryRequired | Self::Unavailable => {
+                Err(VaultApplicationError::VaultUnavailable)
+            }
+        }
+    }
+
+    fn confirmed_mut(&mut self) -> Result<&mut ConfirmedState, VaultApplicationError> {
+        match self {
+            Self::Ready(state) => Ok(state),
+            Self::RecoveryRequired | Self::Unavailable => {
+                Err(VaultApplicationError::VaultUnavailable)
+            }
+        }
+    }
+}
+
+/// 前端启动只需要判别状态；只有 Ready 分支携带安全摘要。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VaultApplicationStatus {
+    Ready(VaultSnapshot),
+    RecoveryRequired,
+    Unavailable,
+}
+
 /// 持有单实例 guard、持久化边界和最近一次已确认密码库快照的应用状态。
 pub struct VaultApplication {
     // 类型擦除让应用层不依赖 Windows，未来 macOS guard 可复用同一所有权模型。
     _instance_guard: Box<dyn Send + Sync>,
     repository: Box<dyn VaultRepository>,
-    state: Mutex<ConfirmedState>,
+    state: Mutex<ApplicationState>,
 }
 
 impl VaultApplication {
@@ -137,14 +176,70 @@ impl VaultApplication {
         opened_vault: OpenedVault,
         repository: impl VaultRepository + 'static,
     ) -> Self {
+        Self::from_startup(
+            instance_guard,
+            VaultStartup::Ready(opened_vault),
+            repository,
+        )
+    }
+
+    /// 启动探测状态由应用层持有，非 Ready 状态不会构造伪造空文档。
+    #[must_use]
+    pub fn from_startup(
+        instance_guard: impl Send + Sync + 'static,
+        startup: VaultStartup,
+        repository: impl VaultRepository + 'static,
+    ) -> Self {
+        let state = match startup {
+            VaultStartup::Ready(opened) => ApplicationState::Ready(ConfirmedState {
+                document: opened.document,
+                initialized: opened.initialized,
+            }),
+            VaultStartup::RecoveryRequired => ApplicationState::RecoveryRequired,
+            VaultStartup::Unavailable => ApplicationState::Unavailable,
+        };
         Self {
             _instance_guard: Box::new(instance_guard),
             repository: Box::new(repository),
-            state: Mutex::new(ConfirmedState {
-                document: opened_vault.document,
-                initialized: opened_vault.initialized,
-            }),
+            state: Mutex::new(state),
         }
+    }
+
+    /// 返回安全启动状态，待恢复和不可用分支不包含账号或密码库内容。
+    pub fn status(&self) -> Result<VaultApplicationStatus, VaultApplicationError> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        Ok(match &*state {
+            ApplicationState::Ready(confirmed) => {
+                VaultApplicationStatus::Ready(snapshot_from(confirmed))
+            }
+            ApplicationState::RecoveryRequired => VaultApplicationStatus::RecoveryRequired,
+            ApplicationState::Unavailable => VaultApplicationStatus::Unavailable,
+        })
+    }
+
+    /// 只有待恢复状态可以调用；失败保持待恢复，成功才发布确认快照。
+    pub fn recover_from_backup(&self) -> Result<VaultSnapshot, VaultApplicationError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        if !matches!(*state, ApplicationState::RecoveryRequired) {
+            return Err(VaultApplicationError::RecoveryNotAvailable);
+        }
+        let opened = self
+            .repository
+            .recover_from_backup()
+            .map_err(|_| VaultApplicationError::RecoveryFailed)?;
+        let confirmed = ConfirmedState {
+            document: opened.document,
+            initialized: false,
+        };
+        let snapshot = snapshot_from(&confirmed);
+        *state = ApplicationState::Ready(confirmed);
+        Ok(snapshot)
     }
 
     /// 生成不包含路径、密钥、密码和备注的当前确认快照。
@@ -153,7 +248,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
-        Ok(snapshot_from(&state))
+        Ok(snapshot_from(state.confirmed()?))
     }
 
     /// 创建分类并持久化；只有磁盘回读认证成功后才发布新内存快照。
@@ -163,6 +258,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .create_category(name)
@@ -192,6 +288,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .rename_category(category_id, name)
@@ -217,6 +314,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .delete_category(category_id)
@@ -249,6 +347,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .create_account(CreateAccount {
@@ -280,6 +379,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed()?;
         let account = state
             .document
             .accounts
@@ -308,6 +408,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed()?;
         let account = state
             .document
             .accounts
@@ -332,6 +433,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .record_account_used(account_id, used_at)
@@ -366,6 +468,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed()?;
         let accounts = state
             .document
             .search_accounts(query, scope)
@@ -403,6 +506,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .update_account(
@@ -440,6 +544,7 @@ impl VaultApplication {
             .state
             .lock()
             .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
             .delete_account(account_id)
@@ -573,6 +678,8 @@ mod tests {
     struct TestRepository {
         save_count: Arc<AtomicUsize>,
         fail: bool,
+        recovery_document: Option<VaultDocument>,
+        recovery_count: Arc<AtomicUsize>,
     }
 
     impl VaultRepository for TestRepository {
@@ -587,6 +694,17 @@ mod tests {
                 Ok(candidate.clone())
             }
         }
+
+        fn recover_from_backup(&self) -> Result<OpenedVault, VaultOpenError> {
+            self.recovery_count.fetch_add(1, Ordering::SeqCst);
+            self.recovery_document
+                .clone()
+                .map(|document| OpenedVault {
+                    document,
+                    initialized: false,
+                })
+                .ok_or(VaultOpenError::Unavailable)
+        }
     }
 
     fn application(fail_save: bool) -> (VaultApplication, Arc<AtomicBool>, Arc<AtomicUsize>) {
@@ -599,6 +717,7 @@ mod tests {
     ) -> (VaultApplication, Arc<AtomicBool>, Arc<AtomicUsize>) {
         let dropped = Arc::new(AtomicBool::new(false));
         let save_count = Arc::new(AtomicUsize::new(0));
+        let recovery_count = Arc::new(AtomicUsize::new(0));
         let application = VaultApplication::new(
             TestGuard {
                 dropped: Arc::clone(&dropped),
@@ -610,9 +729,29 @@ mod tests {
             TestRepository {
                 save_count: Arc::clone(&save_count),
                 fail: fail_save,
+                recovery_document: None,
+                recovery_count,
             },
         );
         (application, dropped, save_count)
+    }
+
+    fn recovery_application(
+        startup: VaultStartup,
+        recovery_document: Option<VaultDocument>,
+    ) -> (VaultApplication, Arc<AtomicUsize>) {
+        let recovery_count = Arc::new(AtomicUsize::new(0));
+        let application = VaultApplication::from_startup(
+            (),
+            startup,
+            TestRepository {
+                save_count: Arc::new(AtomicUsize::new(0)),
+                fail: false,
+                recovery_document,
+                recovery_count: Arc::clone(&recovery_count),
+            },
+        );
+        (application, recovery_count)
     }
 
     #[test]
@@ -631,6 +770,78 @@ mod tests {
 
         drop(application);
         assert!(dropped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn recovery_required_is_read_only_until_explicit_recovery() {
+        let (application, recovery_count) =
+            recovery_application(VaultStartup::RecoveryRequired, None);
+
+        assert_eq!(
+            application.status(),
+            Ok(VaultApplicationStatus::RecoveryRequired)
+        );
+        assert_eq!(
+            application.create_category("不得写入"),
+            Err(VaultApplicationError::VaultUnavailable)
+        );
+        assert_eq!(
+            application.snapshot(),
+            Err(VaultApplicationError::VaultUnavailable)
+        );
+        assert_eq!(recovery_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn explicit_recovery_transitions_to_ready_snapshot() {
+        let mut recovered = VaultDocument::empty();
+        recovered.revision = 9;
+        recovered
+            .create_category("上一版")
+            .expect("测试分类应创建成功");
+        let (application, recovery_count) =
+            recovery_application(VaultStartup::RecoveryRequired, Some(recovered.clone()));
+
+        let snapshot = application.recover_from_backup().expect("显式恢复应成功");
+
+        assert_eq!(snapshot.revision, recovered.revision);
+        assert_eq!(snapshot.categories[0].name, "上一版");
+        assert_eq!(
+            application.status(),
+            Ok(VaultApplicationStatus::Ready(snapshot))
+        );
+        assert_eq!(recovery_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn recovery_failure_keeps_recovery_required_state() {
+        let (application, recovery_count) =
+            recovery_application(VaultStartup::RecoveryRequired, None);
+
+        assert_eq!(
+            application.recover_from_backup(),
+            Err(VaultApplicationError::RecoveryFailed)
+        );
+        assert_eq!(
+            application.status(),
+            Ok(VaultApplicationStatus::RecoveryRequired)
+        );
+        assert_eq!(recovery_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn unavailable_state_cannot_start_recovery() {
+        let (application, recovery_count) = recovery_application(VaultStartup::Unavailable, None);
+
+        assert_eq!(
+            application.status(),
+            Ok(VaultApplicationStatus::Unavailable)
+        );
+        assert_eq!(
+            application.recover_from_backup(),
+            Err(VaultApplicationError::RecoveryNotAvailable)
+        );
+        assert_eq!(recovery_count.load(Ordering::SeqCst), 0);
     }
 
     #[test]
