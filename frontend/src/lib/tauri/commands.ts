@@ -46,6 +46,11 @@ export type AccountSearchSnapshot = {
   accounts: AccountSummary[];
 };
 
+/** 明文密码只在用户明确点击显示后，以单条、一次性响应返回。 */
+export type RevealedPassword = {
+  password: string;
+};
+
 export type UpdateAccountInput = CreateAccountInput;
 
 export type VaultStatus = {
@@ -92,6 +97,21 @@ export function createAccount(input: CreateAccountInput): Promise<VaultStatus> {
 /** 每次必须指定一个账号 ID，Rust 只返回该条记录的编辑字段。 */
 export function loadAccountForEdit(id: string): Promise<AccountEditDetail> {
   return invoke<AccountEditDetail>("load_account_for_edit", { id });
+}
+
+/** 列表显示密码使用独立 command，不复用包含全部编辑字段的详情响应。 */
+export function revealAccountPassword(id: string): Promise<RevealedPassword> {
+  return invoke<RevealedPassword>("reveal_account_password", { id });
+}
+
+/** 复制由 Rust 按稳定 ID 读取并写入系统剪贴板，前端不接收账号名响应。 */
+export function copyAccountUsername(id: string): Promise<void> {
+  return invoke<void>("copy_account_username", { id });
+}
+
+/** 密码直接在 Rust/Windows 边界写入，响应不包含密码或清理凭证。 */
+export function copyAccountPassword(id: string): Promise<void> {
+  return invoke<void>("copy_account_password", { id });
 }
 
 /** 搜索只返回安全账号摘要和当前 revision，不会触发密码库写入。 */

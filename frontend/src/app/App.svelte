@@ -3,11 +3,14 @@
   import {
     createAccount,
     createCategory,
+    copyAccountPassword,
+    copyAccountUsername,
     deleteAccount,
     deleteCategory,
     loadAccountForEdit,
     loadVault,
     renameCategory,
+    revealAccountPassword,
     searchAccounts,
     updateAccount,
     type AccountSearchScope,
@@ -55,6 +58,10 @@
   let searchStatus: "idle" | "loading" | "ready" | "error" = "idle";
   let searchError = "";
   let searchSequence = 0;
+  let revealedCredential: { accountId: string; password: string } | null = null;
+  let revealLoadingAccountId: string | null = null;
+  let revealSequence = 0;
+  let credentialAction: { accountId: string; kind: "username" | "password" } | null = null;
 
   function emptyAccountDraft() {
     return {
@@ -69,6 +76,7 @@
 
   /** 每次只接受 Rust 已确认的摘要；调用失败时不伪装成空密码库。 */
   async function refreshVault() {
+    clearRevealedPassword();
     status = "loading";
     errorMessage = "";
 
@@ -175,11 +183,13 @@
 
   /** 先同步输入框的新值，再发起搜索，避免事件处理早于 bind:value 更新而少搜一个字符。 */
   function handleSearchInput(event: Event) {
+    clearRevealedPassword();
     searchQuery = (event.currentTarget as HTMLInputElement).value;
     void runSearch();
   }
 
   function selectCategory(categoryId: string | "uncategorized" | null) {
+    clearRevealedPassword();
     selectedCategoryId = categoryId;
     if (searchQuery.trim()) void runSearch();
   }
@@ -202,8 +212,67 @@
     return vault?.categories.find((category) => category.id === categoryId)?.name ?? "未知分类";
   }
 
+  function clearRevealedPassword() {
+    revealSequence += 1;
+    revealedCredential = null;
+    revealLoadingAccountId = null;
+  }
+
+  /** 同一时刻只保留一条临时密码；迟到响应不得恢复已隐藏或已切换的密码。 */
+  async function toggleRevealedPassword(accountId: string) {
+    if (revealedCredential?.accountId === accountId) {
+      clearRevealedPassword();
+      return;
+    }
+
+    const sequence = ++revealSequence;
+    revealedCredential = null;
+    revealLoadingAccountId = accountId;
+    try {
+      const result = await revealAccountPassword(accountId);
+      if (sequence !== revealSequence || revealLoadingAccountId !== accountId) return;
+      revealedCredential = { accountId, password: result.password };
+    } catch (error) {
+      if (sequence !== revealSequence) return;
+      const commandError = error as Partial<CommandError> | null;
+      showNotice(commandError?.message || "密码读取失败，请重试");
+    } finally {
+      if (sequence === revealSequence) revealLoadingAccountId = null;
+    }
+  }
+
+  async function copyCredential(accountId: string, kind: "username" | "password") {
+    if (credentialAction) return;
+    credentialAction = { accountId, kind };
+    try {
+      if (kind === "username") await copyAccountUsername(accountId);
+      else await copyAccountPassword(accountId);
+      showNotice(kind === "username" ? "账号名已复制" : "密码已复制，30 秒后自动清理");
+    } catch (error) {
+      const commandError = error as Partial<CommandError> | null;
+      showNotice(commandError?.message || "复制失败，请重试");
+    } finally {
+      credentialAction = null;
+    }
+  }
+
+  function openAccountFromRow(event: MouseEvent, accountId: string) {
+    const target = event.target;
+    if (target instanceof Element && target.closest("button")) return;
+    clearRevealedPassword();
+    void openEditAccountDialog(accountId);
+  }
+
+  function openAccountFromRowKey(event: KeyboardEvent, accountId: string) {
+    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    clearRevealedPassword();
+    void openEditAccountDialog(accountId);
+  }
+
   /** 新增账号每次都使用全新的 Draft，取消后不会残留上一次输入。 */
   function openAccountDialog() {
+    clearRevealedPassword();
     accountDialogMode = "create";
     editingAccountId = null;
     accountDetailLoaded = true;
@@ -222,6 +291,7 @@
 
   /** 只在用户点击一条账号行后读取该账号的编辑详情。 */
   async function openEditAccountDialog(accountId: string) {
+    clearRevealedPassword();
     const sequence = ++accountLoadSequence;
     accountDialogMode = "edit";
     editingAccountId = accountId;
@@ -300,6 +370,7 @@
       vault = accountDialogMode === "edit" && editingAccountId
         ? await updateAccount(editingAccountId, fields)
         : await createAccount(fields);
+      clearRevealedPassword();
       if (searchQuery.trim()) await runSearch();
       const edited = accountDialogMode === "edit";
       accountDialogOpen = false;
@@ -341,6 +412,7 @@
     try {
       const deletedUsername = pendingDeleteAccount.username;
       vault = await deleteAccount(pendingDeleteAccount.id);
+      clearRevealedPassword();
       if (searchQuery.trim()) await runSearch();
       pendingDeleteAccount = null;
       closeAccountDialog();
@@ -617,14 +689,50 @@
                 {#if visibleAccounts(searchResults).length > 0}
                   <tbody>
                     {#each visibleAccounts(searchResults) as account (account.id)}
-                      <tr class="account-row" role="button" tabindex="0" onclick={() => void openEditAccountDialog(account.id)} onkeydown={(event) => (event.key === "Enter" || event.key === " ") && void openEditAccountDialog(account.id)}>
+                      <tr class="account-row" role="button" tabindex="0" onclick={(event) => openAccountFromRow(event, account.id)} onkeydown={(event) => openAccountFromRowKey(event, account.id)}>
                         <td><strong class="account-name">{account.username}</strong></td>
                         <td title={account.address ?? ""}>{account.address || "—"}</td>
                         <td title={account.email ?? ""}>{account.email || "—"}</td>
                         <td>{accountCategoryName(account.categoryId)}</td>
-                        <td><span class="password-saved">已保存</span></td>
+                        <td>
+                          <div class="password-cell">
+                            <span class:revealed={revealedCredential?.accountId === account.id}>{revealedCredential?.accountId === account.id ? revealedCredential.password : "••••••••"}</span>
+                            <button
+                              class="credential-button"
+                              type="button"
+                              aria-label={revealedCredential?.accountId === account.id ? "隐藏密码" : "显示密码"}
+                              title={revealedCredential?.accountId === account.id ? "隐藏密码" : "显示密码"}
+                              disabled={revealLoadingAccountId === account.id}
+                              onclick={(event) => { event.stopPropagation(); void toggleRevealedPassword(account.id); }}
+                              onkeydown={(event) => event.stopPropagation()}
+                            >
+                              {revealLoadingAccountId === account.id ? "…" : revealedCredential?.accountId === account.id ? "隐藏" : "显示"}
+                            </button>
+                          </div>
+                        </td>
                         <td>未使用</td>
-                        <td><span class="row-edit-hint">编辑</span></td>
+                        <td>
+                          <div class="credential-actions">
+                            <button
+                              class="credential-button"
+                              type="button"
+                              aria-label="复制账号名"
+                              title="复制账号名"
+                              disabled={credentialAction !== null}
+                              onclick={(event) => { event.stopPropagation(); void copyCredential(account.id, "username"); }}
+                              onkeydown={(event) => event.stopPropagation()}
+                            >账号</button>
+                            <button
+                              class="credential-button"
+                              type="button"
+                              aria-label="复制密码"
+                              title="复制密码"
+                              disabled={credentialAction !== null}
+                              onclick={(event) => { event.stopPropagation(); void copyCredential(account.id, "password"); }}
+                              onkeydown={(event) => event.stopPropagation()}
+                            >密码</button>
+                          </div>
+                        </td>
                       </tr>
                     {/each}
                   </tbody>
