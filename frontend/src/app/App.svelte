@@ -184,8 +184,9 @@
     if (searchQuery.trim()) void runSearch();
   }
 
-  function visibleAccounts(): AccountSummary[] {
-    if (searchQuery.trim()) return [...searchResults].reverse();
+  /** 通过参数让 Svelte 明确追踪搜索结果，Rust 返回后列表才能立即重新渲染。 */
+  function visibleAccounts(currentSearchResults: AccountSummary[]): AccountSummary[] {
+    if (searchQuery.trim()) return [...currentSearchResults].reverse();
     const accounts = vault?.accounts ?? [];
     const filtered = selectedCategoryId === null
       ? accounts
@@ -590,7 +591,7 @@
             <div class="panel-head table-heading">
               <div>
                 <h2>{selectedViewName()}</h2>
-                <p>{searchQuery.trim() ? `${visibleAccounts().length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
+                <p>{searchQuery.trim() ? `${visibleAccounts(searchResults).length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
               </div>
               <label class="sort-control">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6M4 5v14" /></svg>
@@ -613,9 +614,9 @@
                     <th aria-label="操作"></th>
                   </tr>
                 </thead>
-                {#if visibleAccounts().length > 0}
+                {#if visibleAccounts(searchResults).length > 0}
                   <tbody>
-                    {#each visibleAccounts() as account (account.id)}
+                    {#each visibleAccounts(searchResults) as account (account.id)}
                       <tr class="account-row" role="button" tabindex="0" onclick={() => void openEditAccountDialog(account.id)} onkeydown={(event) => (event.key === "Enter" || event.key === " ") && void openEditAccountDialog(account.id)}>
                         <td><strong class="account-name">{account.username}</strong></td>
                         <td title={account.address ?? ""}>{account.address || "—"}</td>
@@ -629,7 +630,7 @@
                   </tbody>
                 {/if}
               </table>
-              {#if visibleAccounts().length === 0}
+              {#if visibleAccounts(searchResults).length === 0}
                 <div class="empty-state">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
                   <strong>{status === "loading" ? "正在读取账号" : searchStatus === "loading" ? "正在搜索账号" : searchStatus === "error" ? "搜索失败" : searchQuery.trim() ? "没有匹配账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
