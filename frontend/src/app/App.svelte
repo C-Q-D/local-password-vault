@@ -98,7 +98,30 @@
   };
 
   let currentUsageChart: UsageChart;
+  let currentVisibleAccounts: AccountSummary[] = [];
+  let categoryNamesById = new Map<string, string>();
   $: currentUsageChart = usageChart(vault?.usageEvents ?? [], usageRangeDays);
+  // 同一个状态版本只生成一次排序列表，数量、表格和空状态共同复用。
+  $: currentVisibleAccounts = deriveVisibleAccounts(
+    vault?.accounts ?? [],
+    searchResults,
+    searchQuery,
+    selectedCategoryId,
+    accountSort,
+  );
+  $: categoryNamesById = new Map(
+    (vault?.categories ?? []).map((category) => [category.id, category.name]),
+  );
+
+  // 格式器创建成本明显高于单次 format，组件生命周期内共享一个实例。
+  const lastUsedFormatter = new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
   function emptyAccountDraft() {
     return {
@@ -273,18 +296,21 @@
     activeView = "settings";
   }
 
-  /** 通过参数让 Svelte 明确追踪搜索结果和排序值，两者变化后列表都立即重新渲染。 */
-  function visibleAccounts(
+  /** 所有输入都由响应式语句显式传入，分类、搜索和排序变化都能重新计算。 */
+  function deriveVisibleAccounts(
+    allAccounts: AccountSummary[],
     currentSearchResults: AccountSummary[],
+    currentSearchQuery: string,
+    currentCategoryId: string | "uncategorized" | null,
     sortDirection: "recent" | "earliest",
   ): AccountSummary[] {
-    const accounts = searchQuery.trim()
+    const accounts = currentSearchQuery.trim()
       ? currentSearchResults
-      : selectedCategoryId === null
-        ? vault?.accounts ?? []
-        : selectedCategoryId === "uncategorized"
-          ? (vault?.accounts ?? []).filter((account) => account.categoryId === null)
-          : (vault?.accounts ?? []).filter((account) => account.categoryId === selectedCategoryId);
+      : currentCategoryId === null
+        ? allAccounts
+        : currentCategoryId === "uncategorized"
+          ? allAccounts.filter((account) => account.categoryId === null)
+          : allAccounts.filter((account) => account.categoryId === currentCategoryId);
 
     // 未使用账号始终排在有记录账号之后；相同时间保持原有顺序，避免列表无故跳动。
     return accounts
@@ -303,14 +329,7 @@
 
   function formatLastUsed(lastUsedAt: number | null): string {
     if (lastUsedAt === null) return "未使用";
-    return new Intl.DateTimeFormat("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(lastUsedAt));
+    return lastUsedFormatter.format(new Date(lastUsedAt));
   }
 
   function localDayKey(date: Date): string {
@@ -423,9 +442,12 @@
     return Math.max(12, Math.min(88, raw));
   }
 
-  function accountCategoryName(categoryId: string | null): string {
+  function accountCategoryName(
+    categoryId: string | null,
+    currentCategoryNames: Map<string, string>,
+  ): string {
     if (!categoryId) return "未分类";
-    return vault?.categories.find((category) => category.id === categoryId)?.name ?? "未知分类";
+    return currentCategoryNames.get(categoryId) ?? "未知分类";
   }
 
   function clearRevealedPassword() {
@@ -997,7 +1019,7 @@
             <div class="panel-head table-heading">
               <div>
                 <h2>{selectedViewName()}</h2>
-                <p>{searchQuery.trim() ? `${visibleAccounts(searchResults, accountSort).length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
+                <p>{searchQuery.trim() ? `${currentVisibleAccounts.length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
               </div>
               <label class="sort-control">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6M4 5v14" /></svg>
@@ -1020,14 +1042,14 @@
                     <th aria-label="操作"></th>
                   </tr>
                 </thead>
-                {#if visibleAccounts(searchResults, accountSort).length > 0}
+                {#if currentVisibleAccounts.length > 0}
                   <tbody>
-                    {#each visibleAccounts(searchResults, accountSort) as account (account.id)}
+                    {#each currentVisibleAccounts as account (account.id)}
                       <tr class="account-row" role="button" tabindex="0" onclick={(event) => openAccountFromRow(event, account.id)} onkeydown={(event) => openAccountFromRowKey(event, account.id)}>
                         <td><strong class="account-name">{account.username}</strong></td>
                         <td title={account.address ?? ""}>{account.address || "—"}</td>
                         <td title={account.email ?? ""}>{account.email || "—"}</td>
-                        <td>{accountCategoryName(account.categoryId)}</td>
+                        <td>{accountCategoryName(account.categoryId, categoryNamesById)}</td>
                         <td>
                           <div class="password-cell">
                             <span class:revealed={revealedCredential?.accountId === account.id}>{revealedCredential?.accountId === account.id ? revealedCredential.password : "••••••••"}</span>
@@ -1072,7 +1094,7 @@
                   </tbody>
                 {/if}
               </table>
-              {#if visibleAccounts(searchResults, accountSort).length === 0}
+              {#if currentVisibleAccounts.length === 0}
                 <div class="empty-state">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
                   <strong>{searchStatus === "loading" ? "正在搜索账号" : searchStatus === "error" ? "搜索失败" : searchQuery.trim() ? "没有匹配账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
