@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{AccountError, CategoryError, UpdateAccountError, VaultValidationError};
+use crate::{
+    AccountError, CategoryError, MoveAccountError, UpdateAccountError, VaultValidationError,
+};
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -150,6 +152,30 @@ impl VaultDocument {
         account.address = input.address;
         account.email = input.email;
         account.notes = input.notes;
+        Ok(())
+    }
+
+    /// 按稳定 ID 更新账号分类归属；目标为 None 时表示移动到“未分类”。
+    pub fn move_account(
+        &mut self,
+        id: Uuid,
+        category_id: Option<Uuid>,
+    ) -> Result<(), MoveAccountError> {
+        let account_index = self
+            .accounts
+            .iter()
+            .position(|account| account.id == id)
+            .ok_or(MoveAccountError::AccountNotFound)?;
+        if category_id.is_some_and(|target_id| {
+            !self
+                .categories
+                .iter()
+                .any(|category| category.id == target_id)
+        }) {
+            return Err(MoveAccountError::CategoryNotFound);
+        }
+
+        self.accounts[account_index].category_id = category_id;
         Ok(())
     }
 
@@ -616,6 +642,71 @@ mod tests {
         assert_eq!(
             document.update_account(Uuid::new_v4(), input("新账号", "新密码")),
             Err(UpdateAccountError::NotFound)
+        );
+        assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn move_account_changes_only_target_category_and_accepts_uncategorized() {
+        let mut document = VaultDocument::empty();
+        let source = document.create_category("工作").expect("源分类应创建成功");
+        let target = document
+            .create_category("个人")
+            .expect("目标分类应创建成功");
+        let account = document
+            .create_account(CreateAccount {
+                category_id: Some(source.id),
+                username: "测试账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: Some("https://example.invalid".to_owned()),
+                email: Some("test@example.invalid".to_owned()),
+                notes: Some("保持不变".to_owned()),
+            })
+            .expect("账号应创建成功");
+        let original_fields = document.accounts[0].clone();
+
+        document
+            .move_account(account.id, Some(target.id))
+            .expect("账号应移动到目标分类");
+        assert_eq!(document.accounts[0].category_id, Some(target.id));
+        assert_eq!(document.accounts[0].id, original_fields.id);
+        assert_eq!(document.accounts[0].username, original_fields.username);
+        assert_eq!(document.accounts[0].password, original_fields.password);
+        assert_eq!(document.accounts[0].address, original_fields.address);
+        assert_eq!(document.accounts[0].email, original_fields.email);
+        assert_eq!(document.accounts[0].notes, original_fields.notes);
+
+        document
+            .move_account(account.id, None)
+            .expect("账号应移动到未分类");
+        assert_eq!(document.accounts[0].category_id, None);
+        assert_eq!(document.validate(), Ok(()));
+    }
+
+    #[test]
+    fn move_account_rejects_unknown_account_or_category_without_mutation() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let account = document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "测试账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("账号应创建成功");
+        let confirmed = document.clone();
+
+        assert_eq!(
+            document.move_account(Uuid::new_v4(), None),
+            Err(MoveAccountError::AccountNotFound)
+        );
+        assert_eq!(document, confirmed);
+        assert_eq!(
+            document.move_account(account.id, Some(Uuid::new_v4())),
+            Err(MoveAccountError::CategoryNotFound)
         );
         assert_eq!(document, confirmed);
     }

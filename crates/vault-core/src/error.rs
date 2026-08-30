@@ -57,3 +57,12 @@ pub enum UpdateAccountError {
     #[error("密码不能为空")]
     PasswordRequired,
 }
+
+/// 移动账号分类返回的稳定错误；失败时候选文档保持不变。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum MoveAccountError {
+    #[error("账号不存在")]
+    AccountNotFound,
+    #[error("账号分类不存在")]
+    CategoryNotFound,
+}
