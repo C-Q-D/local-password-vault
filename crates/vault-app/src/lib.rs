@@ -25,6 +25,7 @@ pub struct AccountSummary {
     pub username: String,
     pub address: Option<String>,
     pub email: Option<String>,
+    pub last_used_at: Option<u64>,
 }
 
 /// 前端传入的搜索范围；分类 ID 仍由应用层在当前确认状态中解析和验证。
@@ -320,6 +321,34 @@ impl VaultApplication {
         })
     }
 
+    /// 将一次已经成功的凭据使用记录到确认文档；保存失败时继续保留旧快照。
+    pub fn record_account_used(
+        &self,
+        id: &str,
+        used_at: u64,
+    ) -> Result<VaultSnapshot, VaultApplicationError> {
+        let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let mut candidate = state.document.clone();
+        candidate
+            .record_account_used(account_id, used_at)
+            .map_err(|_| VaultApplicationError::AccountNotFound)?;
+        candidate.revision = candidate
+            .revision
+            .checked_add(1)
+            .ok_or(VaultApplicationError::VaultSaveFailed)?;
+
+        let confirmed = self
+            .repository
+            .save_confirmed(&candidate)
+            .map_err(|_| VaultApplicationError::VaultSaveFailed)?;
+        state.document = confirmed;
+        Ok(snapshot_from(&state))
+    }
+
     /// 在当前确认文档中执行只读搜索，不增加 revision，也不调用持久化仓储。
     pub fn search_accounts(
         &self,
@@ -348,6 +377,7 @@ impl VaultApplication {
                 username: account.username,
                 address: account.address,
                 email: account.email,
+                last_used_at: account.last_used_at,
             })
             .collect();
         Ok(AccountSearchSnapshot {
@@ -512,6 +542,7 @@ fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
                 username: account.username.clone(),
                 address: account.address.clone(),
                 email: account.email.clone(),
+                last_used_at: account.last_used_at,
             })
             .collect(),
     }
@@ -735,6 +766,7 @@ mod tests {
             address: None,
             email: None,
             notes: None,
+            last_used_at: None,
         });
         let (application, _, save_count) = application_with_document(false, document);
         let before = application.snapshot().expect("快照应可读取");
@@ -1139,5 +1171,54 @@ mod tests {
             Err(VaultApplicationError::AccountNotFound)
         );
         assert_eq!(save_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn recording_credential_use_persists_timestamp_and_returns_updated_snapshot() {
+        let mut document = VaultDocument::empty();
+        let target = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "最近使用账号".to_owned(),
+                password: "隔离测试密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("测试账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+
+        let updated = application
+            .record_account_used(&target.id.to_string(), 1_700_000_000_123)
+            .expect("复制成功后应记录最近使用时间");
+
+        assert_eq!(updated.accounts[0].last_used_at, Some(1_700_000_000_123));
+        assert_eq!(updated.revision, 1);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
+        assert_eq!(application.snapshot().expect("快照应可读取"), updated);
+    }
+
+    #[test]
+    fn recording_credential_use_save_failure_keeps_previous_snapshot() {
+        let mut document = VaultDocument::empty();
+        let target = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "保留旧时间".to_owned(),
+                password: "隔离测试密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("测试账号应创建成功");
+        let (application, _, save_count) = application_with_document(true, document);
+        let before = application.snapshot().expect("旧快照应可读取");
+
+        assert_eq!(
+            application.record_account_used(&target.id.to_string(), 1_700_000_000_123),
+            Err(VaultApplicationError::VaultSaveFailed)
+        );
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
     }
 }

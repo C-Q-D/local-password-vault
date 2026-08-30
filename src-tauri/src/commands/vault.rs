@@ -7,7 +7,10 @@ use vault_app::{
 };
 
 #[cfg(target_os = "windows")]
-use std::{thread, time::Duration};
+use std::{
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 #[cfg(target_os = "windows")]
 use vault_platform_windows::clipboard::{ClipboardError, WindowsClipboard};
 #[cfg(target_os = "windows")]
@@ -34,6 +37,7 @@ pub(crate) struct AccountDto {
     username: String,
     address: Option<String>,
     email: Option<String>,
+    last_used_at: Option<u64>,
 }
 
 /// 新增账号请求仅在 command 调用期间持有明文密码，不写日志也不放入响应。
@@ -159,6 +163,7 @@ impl From<AccountSummary> for AccountDto {
             username: account.username,
             address: account.address,
             email: account.email,
+            last_used_at: account.last_used_at,
         }
     }
 }
@@ -349,12 +354,16 @@ pub(crate) fn copy_account_username(
     id: String,
     application: State<'_, VaultApplication>,
     clipboard: State<'_, WindowsClipboard>,
-) -> Result<(), CommandErrorDto> {
+) -> Result<VaultStatusDto, CommandErrorDto> {
     let username = application
         .credential(&id, CredentialField::Username)
         .map_err(CommandErrorDto::from)?;
     clipboard
         .copy_text(&username)
+        .map_err(CommandErrorDto::from)?;
+    application
+        .record_account_used(&id, unix_time_millis())
+        .map(VaultStatusDto::from)
         .map_err(CommandErrorDto::from)
 }
 
@@ -364,7 +373,7 @@ pub(crate) fn copy_account_password(
     id: String,
     application: State<'_, VaultApplication>,
     clipboard: State<'_, WindowsClipboard>,
-) -> Result<(), CommandErrorDto> {
+) -> Result<VaultStatusDto, CommandErrorDto> {
     let password = Zeroizing::new(
         application
             .credential(&id, CredentialField::Password)
@@ -379,7 +388,20 @@ pub(crate) fn copy_account_password(
         thread::sleep(PASSWORD_CLEAR_DELAY);
         let _ = receipt.clear_if_owned();
     });
-    Ok(())
+    application
+        .record_account_used(&id, unix_time_millis())
+        .map(VaultStatusDto::from)
+        .map_err(CommandErrorDto::from)
+}
+
+#[cfg(target_os = "windows")]
+fn unix_time_millis() -> u64 {
+    // 系统时间异常时使用 0，避免剪贴板已经写入后再暴露无关内部错误。
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u64::MAX as u128) as u64
 }
 
 // macOS 平台适配尚未进入当前交付范围；保留同名 command 使通用 IPC 契约可迁移。
@@ -483,6 +505,7 @@ mod tests {
                 username: "测试账号".to_owned(),
                 address: Some("https://example.invalid".to_owned()),
                 email: None,
+                last_used_at: Some(1_700_000_000_123),
             }],
         });
 
@@ -491,6 +514,7 @@ mod tests {
         assert_eq!(dto.revision, 2);
         assert_eq!(dto.accounts[0].username, "测试账号");
         assert_eq!(dto.accounts[0].category_id.as_deref(), Some("safe-id"));
+        assert_eq!(dto.accounts[0].last_used_at, Some(1_700_000_000_123));
     }
 
     #[test]
@@ -574,6 +598,7 @@ mod tests {
                 username: "账号".to_owned(),
                 address: None,
                 email: Some("test@example.invalid".to_owned()),
+                last_used_at: None,
             }],
         });
 

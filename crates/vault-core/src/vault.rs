@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    AccountError, CategoryError, DeleteAccountError, MoveAccountError, SearchAccountError,
-    UpdateAccountError, VaultValidationError,
+    AccountError, AccountUsageError, CategoryError, DeleteAccountError, MoveAccountError,
+    SearchAccountError, UpdateAccountError, VaultValidationError,
 };
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
@@ -125,6 +125,7 @@ impl VaultDocument {
             address: input.address,
             email: input.email,
             notes: input.notes,
+            last_used_at: None,
         };
         self.accounts.push(account.clone());
         Ok(account)
@@ -189,6 +190,17 @@ impl VaultDocument {
             .ok_or(DeleteAccountError::NotFound)?;
 
         self.accounts.remove(account_index);
+        Ok(())
+    }
+
+    /// 只有凭据操作成功后才记录时间；时间由调用边界提供，便于稳定测试。
+    pub fn record_account_used(&mut self, id: Uuid, used_at: u64) -> Result<(), AccountUsageError> {
+        let account = self
+            .accounts
+            .iter_mut()
+            .find(|account| account.id == id)
+            .ok_or(AccountUsageError::NotFound)?;
+        account.last_used_at = Some(used_at);
         Ok(())
     }
 
@@ -295,6 +307,9 @@ pub struct Account {
     pub address: Option<String>,
     pub email: Option<String>,
     pub notes: Option<String>,
+    /// 旧密码库没有该字段时按“从未使用”读取，避免为本次增量字段升级 schema。
+    #[serde(default)]
+    pub last_used_at: Option<u64>,
 }
 
 /// 账号搜索的范围；用户分类始终使用稳定 UUID。
@@ -313,6 +328,7 @@ pub struct AccountSearchResult {
     pub username: String,
     pub address: Option<String>,
     pub email: Option<String>,
+    pub last_used_at: Option<u64>,
 }
 
 impl From<&Account> for AccountSearchResult {
@@ -323,6 +339,7 @@ impl From<&Account> for AccountSearchResult {
             username: account.username.clone(),
             address: account.address.clone(),
             email: account.email.clone(),
+            last_used_at: account.last_used_at,
         }
     }
 }
@@ -382,7 +399,23 @@ mod tests {
             address: Some("https://example.invalid".to_owned()),
             email: None,
             notes: None,
+            last_used_at: None,
         }
+    }
+
+    #[test]
+    fn account_without_last_used_time_remains_compatible() {
+        let mut document = VaultDocument::empty();
+        document.accounts.push(valid_account(None));
+        let mut value = serde_json::to_value(&document).expect("测试文档应可序列化");
+        value["accounts"][0]
+            .as_object_mut()
+            .expect("账号应为对象")
+            .remove("last_used_at");
+
+        let loaded: VaultDocument = serde_json::from_value(value).expect("旧账号文档应继续可读取");
+
+        assert_eq!(loaded.accounts[0].last_used_at, None);
     }
 
     #[test]

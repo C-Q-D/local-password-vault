@@ -80,3 +80,10 @@ pub enum SearchAccountError {
     #[error("账号分类不存在")]
     CategoryNotFound,
 }
+
+/// 记录账号使用时间时返回的稳定错误。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum AccountUsageError {
+    #[error("账号不存在")]
+    NotFound,
+}
