@@ -14,6 +14,7 @@ export type AccountSummary = {
   username: string;
   address: string | null;
   email: string | null;
+  lastUsedAt: number | null;
 };
 
 export type CreateAccountInput = {
@@ -105,13 +106,13 @@ export function revealAccountPassword(id: string): Promise<RevealedPassword> {
 }
 
 /** 复制由 Rust 按稳定 ID 读取并写入系统剪贴板，前端不接收账号名响应。 */
-export function copyAccountUsername(id: string): Promise<void> {
-  return invoke<void>("copy_account_username", { id });
+export function copyAccountUsername(id: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("copy_account_username", { id });
 }
 
 /** 密码直接在 Rust/Windows 边界写入，响应不包含密码或清理凭证。 */
-export function copyAccountPassword(id: string): Promise<void> {
-  return invoke<void>("copy_account_password", { id });
+export function copyAccountPassword(id: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("copy_account_password", { id });
 }
 
 /** 搜索只返回安全账号摘要和当前 revision，不会触发密码库写入。 */

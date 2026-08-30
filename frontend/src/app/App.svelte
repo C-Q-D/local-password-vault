@@ -62,6 +62,7 @@
   let revealLoadingAccountId: string | null = null;
   let revealSequence = 0;
   let credentialAction: { accountId: string; kind: "username" | "password" } | null = null;
+  let accountSort: "recent" | "earliest" = "recent";
 
   function emptyAccountDraft() {
     return {
@@ -196,15 +197,39 @@
 
   /** 通过参数让 Svelte 明确追踪搜索结果，Rust 返回后列表才能立即重新渲染。 */
   function visibleAccounts(currentSearchResults: AccountSummary[]): AccountSummary[] {
-    if (searchQuery.trim()) return [...currentSearchResults].reverse();
-    const accounts = vault?.accounts ?? [];
-    const filtered = selectedCategoryId === null
-      ? accounts
-      : selectedCategoryId === "uncategorized"
-        ? accounts.filter((account) => account.categoryId === null)
-        : accounts.filter((account) => account.categoryId === selectedCategoryId);
-    // 当前尚未接入最近使用时间，新创建记录按持久化顺序显示在前面。
-    return [...filtered].reverse();
+    const accounts = searchQuery.trim()
+      ? currentSearchResults
+      : selectedCategoryId === null
+        ? vault?.accounts ?? []
+        : selectedCategoryId === "uncategorized"
+          ? (vault?.accounts ?? []).filter((account) => account.categoryId === null)
+          : (vault?.accounts ?? []).filter((account) => account.categoryId === selectedCategoryId);
+
+    // 未使用账号始终排在有记录账号之后；相同时间保持原有顺序，避免列表无故跳动。
+    return accounts
+      .map((account, index) => ({ account, index }))
+      .sort((left, right) => {
+        const leftTime = left.account.lastUsedAt;
+        const rightTime = right.account.lastUsedAt;
+        if (leftTime === null && rightTime === null) return left.index - right.index;
+        if (leftTime === null) return 1;
+        if (rightTime === null) return -1;
+        const difference = accountSort === "recent" ? rightTime - leftTime : leftTime - rightTime;
+        return difference || left.index - right.index;
+      })
+      .map(({ account }) => account);
+  }
+
+  function formatLastUsed(lastUsedAt: number | null): string {
+    if (lastUsedAt === null) return "未使用";
+    return new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(lastUsedAt));
   }
 
   function accountCategoryName(categoryId: string | null): string {
@@ -245,8 +270,10 @@
     if (credentialAction) return;
     credentialAction = { accountId, kind };
     try {
-      if (kind === "username") await copyAccountUsername(accountId);
-      else await copyAccountPassword(accountId);
+      vault = kind === "username"
+        ? await copyAccountUsername(accountId)
+        : await copyAccountPassword(accountId);
+      if (searchQuery.trim()) await runSearch();
       showNotice(kind === "username" ? "账号名已复制" : "密码已复制，30 秒后自动清理");
     } catch (error) {
       const commandError = error as Partial<CommandError> | null;
@@ -667,9 +694,9 @@
               </div>
               <label class="sort-control">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6M4 5v14" /></svg>
-                <select disabled aria-label="账号排序">
-                  <option>最近使用优先</option>
-                  <option>最早使用优先</option>
+                <select bind:value={accountSort} aria-label="账号排序">
+                  <option value="recent">最近使用优先</option>
+                  <option value="earliest">最早使用优先</option>
                 </select>
               </label>
             </div>
@@ -699,7 +726,7 @@
                             <span class:revealed={revealedCredential?.accountId === account.id}>{revealedCredential?.accountId === account.id ? revealedCredential.password : "••••••••"}</span>
                           </div>
                         </td>
-                        <td>未使用</td>
+                        <td>{formatLastUsed(account.lastUsedAt)}</td>
                         <td>
                           <div class="credential-actions">
                             <button
