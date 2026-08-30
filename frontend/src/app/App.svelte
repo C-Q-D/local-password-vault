@@ -697,6 +697,11 @@
                         <td>
                           <div class="password-cell">
                             <span class:revealed={revealedCredential?.accountId === account.id}>{revealedCredential?.accountId === account.id ? revealedCredential.password : "••••••••"}</span>
+                          </div>
+                        </td>
+                        <td>未使用</td>
+                        <td>
+                          <div class="credential-actions">
                             <button
                               class="credential-button"
                               type="button"
@@ -708,11 +713,6 @@
                             >
                               {revealLoadingAccountId === account.id ? "…" : revealedCredential?.accountId === account.id ? "隐藏" : "显示"}
                             </button>
-                          </div>
-                        </td>
-                        <td>未使用</td>
-                        <td>
-                          <div class="credential-actions">
                             <button
                               class="credential-button"
                               type="button"
