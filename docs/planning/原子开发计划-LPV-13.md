@@ -5,7 +5,7 @@
 - 计划 ID：ATOMIC-LPV-13-001
 - 类型：atomic-development
 - 修订版本：1
-- 状态：active
+- 状态：completed
 - 父级 ID：LPV-13
 - 创建基线：c5427a9
 
@@ -103,7 +103,7 @@
 
 ## LPV-13-04 显示恢复确认与不可编辑状态
 
-- 状态：pending
+- 状态：done
 - 支持的验收场景：待恢复时显示确认；取消不写盘；确认显示恢复中并成功进入主界面；失败和两份无效时保持不可编辑。
 - 唯一目标：Svelte 根据真实启动状态完成最小备份恢复交互。
 - 当前行为与目标行为：当前只有通用读取失败；完成后 RecoveryRequired 与 Unavailable 使用专用工作区状态且隐藏/禁用所有编辑入口。
@@ -123,6 +123,10 @@
 - 风险等级：L1。
 - DDD 门禁：不适用；高风险写入已由前三个原子隔离验证。
 - 计划提交信息：`feat(frontend): [LPV-13-04] 增加备份恢复流程`。
+
+### 执行记录
+
+- 实际验证：`svelte-check` 通过（0 error、0 warning）；运行中的 Tauri Debug 完成 Svelte 与 CSS 热更新；`cargo test --workspace` 共 102 项测试全部通过；格式和 diff 检查通过。恢复故障矩阵仅使用内存 Fake 与隔离临时目录，未向正式 AppData 注入故障，也未执行 Release 构建。
 
 ## 变更记录
 

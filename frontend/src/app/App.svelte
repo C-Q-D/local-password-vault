@@ -8,7 +8,8 @@
     deleteAccount,
     deleteCategory,
     loadAccountForEdit,
-    loadVault,
+    loadVaultState,
+    recoverFromBackup,
     renameCategory,
     revealAccountPassword,
     searchAccounts,
@@ -20,9 +21,11 @@
     type VaultStatus,
   } from "../lib/tauri/commands";
 
-  let status: "loading" | "ready" | "error" = "loading";
+  let status: "loading" | "ready" | "recoveryRequired" | "recovering" | "unavailable" | "error" = "loading";
   let vault: VaultStatus | null = null;
   let errorMessage = "";
+  let recoveryError = "";
+  let recoveryCancelled = false;
   let categoryDialogOpen = false;
   let categoryDialogMode: "create" | "rename" = "create";
   let editingCategoryId: string | null = null;
@@ -81,15 +84,40 @@
     clearRevealedPassword();
     status = "loading";
     errorMessage = "";
+    recoveryError = "";
+    recoveryCancelled = false;
 
     try {
-      vault = await loadVault();
-      status = "ready";
-      if (searchQuery.trim()) await runSearch();
+      const loaded = await loadVaultState();
+      if (loaded.status === "ready") {
+        vault = loaded.vault;
+        status = "ready";
+        if (searchQuery.trim()) await runSearch();
+      } else {
+        vault = null;
+        status = loaded.status;
+      }
     } catch (error) {
       vault = null;
       status = "error";
       errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /** 只有用户点击确认按钮才调用写命令；取消只改变当前界面状态。 */
+  async function confirmRecovery() {
+    if (status !== "recoveryRequired") return;
+    status = "recovering";
+    recoveryError = "";
+    try {
+      vault = await recoverFromBackup();
+      status = "ready";
+      recoveryCancelled = false;
+      showNotice("已从上一版备份恢复密码库");
+    } catch (error) {
+      const commandError = error as Partial<CommandError> | null;
+      status = "recoveryRequired";
+      recoveryError = commandError?.message || "备份恢复失败，密码库仍保持不可编辑";
     }
   }
 
@@ -618,7 +646,7 @@
     <div class="vault-status">
       <span class:online={status === "ready"} class="status-dot"></span>
       <div>
-        <strong>{status === "ready" ? "本地密码库已连接" : status === "error" ? "密码库连接失败" : "正在连接密码库"}</strong>
+        <strong>{status === "ready" ? "本地密码库已连接" : status === "recoveryRequired" || status === "recovering" ? "密码库等待恢复" : status === "unavailable" || status === "error" ? "密码库不可编辑" : "正在连接密码库"}</strong>
         <span>{vault ? `结构版本 ${vault.schemaVersion} · 数据版本 ${vault.revision}` : "数据只保存在当前设备"}</span>
       </div>
     </div>
@@ -628,24 +656,51 @@
     <section class="workspace">
       <header class="topbar">
         <h1>账号管理</h1>
+        {#if status === "ready"}
         <div class="topbar-actions">
           <label class="search-box" aria-label="搜索账号">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
             <input type="search" value={searchQuery} oninput={handleSearchInput} placeholder="搜索账号名、地址、邮箱或备注" disabled={status !== "ready"} />
           </label>
-          <button class="secondary-button" type="button" onclick={refreshVault} disabled={status === "loading"}>
+          <button class="secondary-button" type="button" onclick={refreshVault}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
-            {status === "loading" ? "加载中" : "重新加载"}
+            重新加载
           </button>
           <button class="primary-button" type="button" onclick={openAccountDialog} disabled={status !== "ready"}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             新增账号
           </button>
         </div>
+        {/if}
       </header>
 
       <div class="content-scroll" aria-live="polite">
-        {#if status === "error"}
+        {#if status === "recoveryRequired" || status === "recovering"}
+          <section class="recovery-state" role="alert">
+            <div class="recovery-copy">
+              <span class="recovery-badge">备份恢复</span>
+              <h2>{recoveryCancelled ? "已暂缓恢复" : "检测到可用的上一版备份"}</h2>
+              <p>{recoveryCancelled ? "当前密码库保持不可编辑。点击重新加载后可以再次选择是否恢复。" : "主密码库无法使用，但上一版备份已经通过完整校验。恢复后将使用上一版数据，当前损坏现场会被保留。"}</p>
+              {#if recoveryError}<p class="recovery-error" role="alert">{recoveryError}</p>{/if}
+            </div>
+            <div class="recovery-actions">
+              {#if recoveryCancelled}
+                <button class="secondary-button" type="button" onclick={refreshVault}>重新加载</button>
+              {:else}
+                <button class="secondary-button" type="button" onclick={() => (recoveryCancelled = true)} disabled={status === "recovering"}>暂不恢复</button>
+                <button class="primary-button" type="button" onclick={confirmRecovery} disabled={status === "recovering"}>{status === "recovering" ? "恢复中" : "恢复上一版"}</button>
+              {/if}
+            </div>
+          </section>
+        {:else if status === "unavailable"}
+          <section class="load-error" role="alert">
+            <div>
+              <strong>主密码库和备份都无法使用</strong>
+              <p>为避免覆盖现有数据，应用已停止所有编辑操作，也不会创建新的空密码库。</p>
+            </div>
+            <button class="secondary-button" type="button" onclick={refreshVault}>重新检查</button>
+          </section>
+        {:else if status === "error"}
           <section class="load-error" role="alert">
             <div>
               <strong>无法读取本地密码库</strong>
@@ -653,6 +708,8 @@
             </div>
             <button class="secondary-button" type="button" onclick={refreshVault}>重试</button>
           </section>
+        {:else if status === "loading"}
+          <section class="loading-state" role="status">正在读取并验证本地密码库…</section>
         {:else}
           {#if selectedCategoryId === null}
           <section class="metric-grid" aria-label="密码库概览">
@@ -677,7 +734,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v6c0 4 2.5 6.8 7 9 4.5-2.2 7-5 7-9V6Z" /></svg>
                 <span>本地状态</span>
               </div>
-              <strong class="status-value">{status === "loading" ? "读取中" : vault?.initialized ? "已初始化" : "已加载"}</strong>
+              <strong class="status-value">{vault?.initialized ? "已初始化" : "已加载"}</strong>
               <p>{vault ? `当前数据版本 ${vault.revision}` : "正在等待 Rust 返回确认状态"}</p>
             </article>
           </section>
@@ -785,8 +842,8 @@
               {#if visibleAccounts(searchResults).length === 0}
                 <div class="empty-state">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
-                  <strong>{status === "loading" ? "正在读取账号" : searchStatus === "loading" ? "正在搜索账号" : searchStatus === "error" ? "搜索失败" : searchQuery.trim() ? "没有匹配账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
-                  <span>{status === "loading" || searchStatus === "loading" ? "请稍候" : searchStatus === "error" ? searchError : searchQuery.trim() ? "请尝试其他账号名、地址、邮箱或备注" : "点击右上角“新增账号”保存第一条记录"}</span>
+                  <strong>{searchStatus === "loading" ? "正在搜索账号" : searchStatus === "error" ? "搜索失败" : searchQuery.trim() ? "没有匹配账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
+                  <span>{searchStatus === "loading" ? "请稍候" : searchStatus === "error" ? searchError : searchQuery.trim() ? "请尝试其他账号名、地址、邮箱或备注" : "点击右上角“新增账号”保存第一条记录"}</span>
                 </div>
               {/if}
             </div>
