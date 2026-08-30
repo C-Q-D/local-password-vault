@@ -576,7 +576,7 @@
             </div>
             <div class="field">
               <label class="field-label" for="account-category">分类 <span>*</span></label>
-              <select id="account-category" bind:value={accountDraft.categoryId} disabled={accountSubmitting || accountLoading || accountDialogMode === "edit"} title={accountDialogMode === "edit" ? "分类移动将在下一项接入" : ""}>
+              <select id="account-category" bind:value={accountDraft.categoryId} disabled={accountSubmitting || accountLoading || (accountDialogMode === "edit" && !accountDetailLoaded)}>
                 {#each vault?.categories ?? [] as category (category.id)}
                   <option value={category.id}>{category.name}</option>
                 {/each}
