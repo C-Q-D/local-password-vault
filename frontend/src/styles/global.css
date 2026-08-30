@@ -3,7 +3,10 @@
 :root {
   --font-latin: "Segoe UI Variable", "SF Pro Text", "Helvetica Neue";
   --font-cjk: "MiSans VF", "PingFang SC", "Noto Sans SC", "Microsoft YaHei UI";
-  font-family: var(--font-latin), var(--font-cjk), sans-serif;
+  --app-font-family: var(--font-latin), var(--font-cjk), sans-serif;
+  font-family: var(--app-font-family);
+  /* 这里保留像素基准，字体设置通过修改根字号让所有 rem 文本同步缩放。 */
+  font-size: 16px;
   color: #20201f;
   background: #f8f8f7;
   font-synthesis: none;
@@ -72,7 +75,7 @@ svg {
   gap: 9px;
   padding: 0 10px;
   color: #272361;
-  font-size: 21px;
+  font-size: 1.3125rem;
   font-weight: 700;
 }
 
@@ -85,7 +88,7 @@ svg {
 .nav-label {
   margin: 24px 10px 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .nav-item {
@@ -99,8 +102,15 @@ svg {
   background: #fff;
   padding: 0 10px;
   color: #30302e;
-  font-size: 13.5px;
+  font-size: 0.84375rem;
   font-weight: 550;
+  cursor: pointer;
+}
+
+.nav-item.active {
+  border-color: #cfcec9;
+  background: #f3f3f1;
+  color: #302b80;
 }
 
 .nav-item .count {
@@ -110,7 +120,7 @@ svg {
   background: #eeeeeb;
   padding: 2px 6px;
   color: #777773;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   text-align: center;
 }
 
@@ -151,7 +161,7 @@ svg {
   background: transparent;
   padding: 0 10px;
   color: #555551;
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -183,7 +193,7 @@ svg {
   background: #eeeeeb;
   padding: 2px 6px;
   color: #777773;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   text-align: center;
 }
 
@@ -209,7 +219,7 @@ svg {
   background: transparent;
   padding: 0 8px;
   color: #555551;
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -221,11 +231,13 @@ svg {
   grid-template-columns: 8px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  margin-top: auto;
+  margin-top: 10px;
   border-radius: 10px;
   background: #f1f1ef;
   padding: 12px;
 }
+
+.settings-entry { margin-top: auto; }
 
 .status-dot {
   width: 8px;
@@ -242,12 +254,12 @@ svg {
 
 .vault-status strong {
   margin-bottom: 4px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .vault-status span {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   line-height: 1.45;
 }
 
@@ -293,7 +305,7 @@ h2,
 p { margin: 0; }
 
 h1 {
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 650;
 }
 
@@ -325,7 +337,7 @@ h1 {
   border: 0;
   outline: 0;
   background: transparent;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .secondary-button,
@@ -335,7 +347,7 @@ h1 {
   gap: 7px;
   border-radius: 8px;
   padding: 0 11px;
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -377,7 +389,7 @@ h1 {
 .metric-title {
   gap: 7px;
   color: #555552;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .metric-title svg {
@@ -388,16 +400,16 @@ h1 {
 .metric-card > strong {
   display: block;
   margin-top: 15px;
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 560;
 }
 
-.metric-card > strong.status-value { font-size: 20px; }
+.metric-card > strong.status-value { font-size: 1.25rem; }
 
 .metric-card p {
   margin-top: 11px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .panel {
@@ -418,14 +430,14 @@ h1 {
 
 .panel-head h2 {
   color: #3b3b39;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 630;
 }
 
 .panel-head p {
   margin-top: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .status-pill {
@@ -433,7 +445,7 @@ h1 {
   background: #eaf5ef;
   padding: 4px 7px;
   color: #287a56;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-weight: 620;
 }
 
@@ -472,7 +484,7 @@ h1 {
 
 .overview-range {
   padding: 0 7px;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
 }
 
 .overview-range select {
@@ -509,7 +521,7 @@ h1 {
   flex-direction: column;
   justify-content: space-between;
   color: #a0a09d;
-  font-size: 9.5px;
+  font-size: 0.59375rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -541,13 +553,13 @@ h1 {
   padding: 7px 9px;
   color: #555550;
   box-shadow: 0 3px 10px rgb(24 24 22 / 10%);
-  font-size: 10px;
+  font-size: 0.625rem;
   pointer-events: none;
 }
 
 .usage-tooltip strong {
   color: #252522;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-weight: 650;
 }
 
@@ -576,7 +588,7 @@ h1 {
   overflow: hidden;
   border-top: 1px solid #f0f0ee;
   color: #aaa9a5;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
 }
 
 .guide-line {
@@ -606,7 +618,7 @@ h1 {
   background: #fafafa;
   padding: 0 13px;
   color: #666662;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
 }
 
 .overview-foot span {
@@ -633,7 +645,7 @@ h1 {
   border-radius: 8px;
   padding: 0 9px;
   color: #666662;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .sort-control svg {
@@ -646,7 +658,7 @@ h1 {
   outline: 0;
   background: transparent;
   color: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .table-wrap {
@@ -669,7 +681,7 @@ th {
   border-bottom: 1px solid var(--line);
   padding: 0 12px;
   color: #888884;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-weight: 540;
   text-align: left;
 }
@@ -682,7 +694,7 @@ td {
   border-bottom: 1px solid #f0f0ee;
   padding: 0 12px;
   color: #666662;
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -710,7 +722,7 @@ tbody tr:hover { background: #fcfcfb; }
   min-width: 54px;
   overflow: hidden;
   color: #777773;
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-overflow: ellipsis;
 }
 
@@ -724,7 +736,7 @@ tbody tr:hover { background: #fcfcfb; }
   background: #fff;
   padding: 0 7px;
   color: #666662;
-  font-size: 10px;
+  font-size: 0.625rem;
   cursor: pointer;
 }
 
@@ -757,13 +769,13 @@ tbody tr:hover { background: #fcfcfb; }
 
 .empty-state strong {
   color: #666662;
-  font-size: 12.5px;
+  font-size: 0.78125rem;
   font-weight: 560;
 }
 
 .empty-state span {
   margin-top: 5px;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .load-error {
@@ -778,12 +790,12 @@ tbody tr:hover { background: #fcfcfb; }
   color: #8e3f3f;
 }
 
-.load-error strong { font-size: 13.5px; }
+.load-error strong { font-size: 0.84375rem; }
 
 .load-error p {
   margin-top: 5px;
   color: #9f6262;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
 }
 
 .loading-state,
@@ -796,7 +808,7 @@ tbody tr:hover { background: #fcfcfb; }
 
 .loading-state {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .recovery-state {
@@ -815,19 +827,19 @@ tbody tr:hover { background: #fcfcfb; }
   background: #f3f1e8;
   padding: 4px 9px;
   color: #6f6541;
-  font-size: 10.5px;
+  font-size: 0.65625rem;
   font-weight: 650;
 }
 
 .recovery-copy h2 {
   color: var(--text);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .recovery-copy p {
   margin-top: 8px;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 0.71875rem;
   line-height: 1.7;
 }
 
@@ -877,7 +889,7 @@ tbody tr:hover { background: #fcfcfb; }
 }
 
 .dialog-head h2 {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 650;
 }
 
@@ -888,7 +900,7 @@ tbody tr:hover { background: #fcfcfb; }
   border-radius: 6px;
   background: transparent;
   color: #777773;
-  font-size: 22px;
+  font-size: 1.375rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -901,7 +913,7 @@ tbody tr:hover { background: #fcfcfb; }
   display: block;
   margin-bottom: 8px;
   color: #555551;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -919,7 +931,7 @@ tbody tr:hover { background: #fcfcfb; }
   background: #f4f4f2;
   padding: 9px 11px;
   color: #777773;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
 }
 
 .field-grid {
@@ -935,7 +947,7 @@ tbody tr:hover { background: #fcfcfb; }
   border-radius: 8px;
   outline: 0;
   padding: 0 11px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .dialog-body select,
@@ -947,7 +959,7 @@ tbody tr:hover { background: #fcfcfb; }
   background: #fff;
   padding: 0 11px;
   color: #333331;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .dialog-body select { height: 38px; }
@@ -975,7 +987,7 @@ tbody tr:hover { background: #fcfcfb; }
   border-radius: 5px;
   background: transparent;
   color: #666662;
-  font-size: 11px;
+  font-size: 0.6875rem;
   cursor: pointer;
 }
 
@@ -988,7 +1000,7 @@ tbody tr:hover { background: #fcfcfb; }
 .field-error {
   margin-top: 7px;
   color: #a84848;
-  font-size: 11.5px;
+  font-size: 0.71875rem;
 }
 
 .dialog-foot {
@@ -1001,7 +1013,7 @@ tbody tr:hover { background: #fcfcfb; }
 
 .dialog-copy {
   color: #555551;
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.65;
 }
 
@@ -1012,7 +1024,7 @@ tbody tr:hover { background: #fcfcfb; }
   background: #a44747;
   padding: 0 12px;
   color: #fff;
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -1031,7 +1043,7 @@ tbody tr:hover { background: #fcfcfb; }
   background: #252524;
   padding: 11px 14px;
   color: #fff;
-  font-size: 12px;
+  font-size: 0.75rem;
   box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 }
 
@@ -1059,10 +1071,10 @@ tbody tr:hover { background: #fcfcfb; }
 
   .metric-card > strong {
     margin-top: 10px;
-    font-size: 22px;
+    font-size: 1.375rem;
   }
 
-  .metric-card > strong.status-value { font-size: 19px; }
+  .metric-card > strong.status-value { font-size: 1.1875rem; }
 
   .metric-card p { margin-top: 7px; }
 

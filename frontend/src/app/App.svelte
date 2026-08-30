@@ -1,5 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import FontSettings from "./settings/FontSettings.svelte";
+  import {
+    DEFAULT_FONT_PREFERENCES,
+    applyFontPreferences,
+    loadFontPreferences,
+    saveFontPreferences,
+    type FontPreferences,
+  } from "../lib/preferences/font-preferences";
   import {
     createAccount,
     createCategory,
@@ -68,6 +76,8 @@
   let revealSequence = 0;
   let credentialAction: { accountId: string; kind: "username" | "password" } | null = null;
   let accountSort: "recent" | "earliest" = "recent";
+  let activeView: "accounts" | "settings" = "accounts";
+  let fontPreferences: FontPreferences = { ...DEFAULT_FONT_PREFERENCES };
   type UsageRangeDays = 7 | 30 | 180 | 365;
   let usageRangeDays: UsageRangeDays = 7;
   let hoveredUsageIndex: number | null = null;
@@ -143,8 +153,18 @@
   }
 
   onMount(() => {
+    fontPreferences = loadFontPreferences(window.localStorage);
+    applyFontPreferences(document.documentElement, fontPreferences);
     void refreshVault();
   });
+
+  function updateFontPreferences(preferences: FontPreferences) {
+    fontPreferences = preferences;
+    applyFontPreferences(document.documentElement, preferences);
+    if (!saveFontPreferences(window.localStorage, preferences)) {
+      showNotice("字体已应用，但本机保存失败");
+    }
+  }
 
   /** 每次打开新建弹框都从空表单开始。 */
   function openCategoryDialog() {
@@ -241,8 +261,15 @@
 
   function selectCategory(categoryId: string | "uncategorized" | null) {
     clearRevealedPassword();
+    activeView = "accounts";
     selectedCategoryId = categoryId;
     if (searchQuery.trim()) void runSearch();
+  }
+
+  function openSettings() {
+    clearRevealedPassword();
+    categoryMenu = null;
+    activeView = "settings";
   }
 
   /** 通过参数让 Svelte 明确追踪搜索结果和排序值，两者变化后列表都立即重新渲染。 */
@@ -736,7 +763,7 @@
 <svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
 <svelte:head>
-  <title>Local Vault · 账号管理</title>
+  <title>Local Vault · {activeView === "settings" ? "设置" : "账号管理"}</title>
 </svelte:head>
 
 <div class="app-shell">
@@ -750,7 +777,7 @@
     </div>
 
     <p class="nav-label">密码库</p>
-    <button class:active={selectedCategoryId === null} class="nav-item" type="button" onclick={() => selectCategory(null)}>
+    <button class:active={activeView === "accounts" && selectedCategoryId === null} class="nav-item" type="button" onclick={() => selectCategory(null)}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg>
       <span>账号管理</span>
       <span class="count">{vault?.accountCount ?? 0}</span>
@@ -764,18 +791,23 @@
     </div>
     <div class="category-list">
       {#each vault?.categories ?? [] as category (category.id)}
-        <button class:active={selectedCategoryId === category.id} class="category-item" type="button" title={category.name} onclick={() => selectCategory(category.id)} oncontextmenu={(event) => openCategoryMenu(event, category)}>
+        <button class:active={activeView === "accounts" && selectedCategoryId === category.id} class="category-item" type="button" title={category.name} onclick={() => selectCategory(category.id)} oncontextmenu={(event) => openCategoryMenu(event, category)}>
           <span class="category-dot"></span>
           <span class="category-name">{category.name}</span>
           <span class="count">{category.accountCount}</span>
         </button>
       {/each}
-      <button class:active={selectedCategoryId === "uncategorized"} class="category-item" type="button" title="未分类" onclick={() => selectCategory("uncategorized")}>
+      <button class:active={activeView === "accounts" && selectedCategoryId === "uncategorized"} class="category-item" type="button" title="未分类" onclick={() => selectCategory("uncategorized")}>
         <span class="category-dot muted"></span>
         <span class="category-name">未分类</span>
         <span class="count">{vault?.uncategorizedCount ?? 0}</span>
       </button>
     </div>
+
+    <button class:active={activeView === "settings"} class="nav-item settings-entry" type="button" onclick={openSettings}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></svg>
+      <span>设置</span>
+    </button>
 
     <div class="vault-status">
       <span class:online={status === "ready"} class="status-dot"></span>
@@ -789,8 +821,8 @@
   <main class="main-wrap">
     <section class="workspace">
       <header class="topbar">
-        <h1>账号管理</h1>
-        {#if status === "ready"}
+        <h1>{activeView === "settings" ? "设置" : "账号管理"}</h1>
+        {#if activeView === "accounts" && status === "ready"}
         <div class="topbar-actions">
           <label class="search-box" aria-label="搜索账号">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
@@ -809,7 +841,9 @@
       </header>
 
       <div class="content-scroll" aria-live="polite">
-        {#if status === "recoveryRequired" || status === "recovering"}
+        {#if activeView === "settings"}
+          <FontSettings preferences={fontPreferences} onChange={updateFontPreferences} />
+        {:else if status === "recoveryRequired" || status === "recovering"}
           <section class="recovery-state" role="alert">
             <div class="recovery-copy">
               <span class="recovery-badge">备份恢复</span>
