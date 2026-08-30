@@ -36,7 +36,7 @@ export type AccountEditDetail = {
   notes: string | null;
 };
 
-export type UpdateAccountInput = Omit<CreateAccountInput, "categoryId">;
+export type UpdateAccountInput = CreateAccountInput;
 
 export type VaultStatus = {
   schemaVersion: number;
@@ -84,7 +84,7 @@ export function loadAccountForEdit(id: string): Promise<AccountEditDetail> {
   return invoke<AccountEditDetail>("load_account_for_edit", { id });
 }
 
-/** 字段编辑不能通过该请求改变账号 ID 或分类归属。 */
+/** 字段和分类归属共享一次 Rust 候选保存，账号 ID 仍由独立参数定位。 */
 export function updateAccount(id: string, input: UpdateAccountInput): Promise<VaultStatus> {
   return invoke<VaultStatus>("update_account", { id, input });
 }

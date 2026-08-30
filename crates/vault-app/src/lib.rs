@@ -4,7 +4,8 @@ use std::sync::Mutex;
 
 use uuid::Uuid;
 use vault_core::{
-    AccountError, CategoryError, CreateAccount, UpdateAccount, UpdateAccountError, VaultDocument,
+    AccountError, CategoryError, CreateAccount, MoveAccountError, UpdateAccount,
+    UpdateAccountError, VaultDocument,
 };
 use vault_storage::{OpenedVault, VaultOpenError};
 
@@ -49,9 +50,10 @@ pub struct AccountEditDetail {
     pub notes: Option<String>,
 }
 
-/// 字段更新输入不包含账号 ID 和分类，避免编辑接口改变记录身份或归属。
+/// 账号编辑输入不包含账号 ID；字段和分类归属在同一候选保存中更新。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateAccountInput {
+    pub category_id: Option<String>,
     pub username: String,
     pub password: String,
     pub address: Option<String>,
@@ -272,13 +274,19 @@ impl VaultApplication {
         })
     }
 
-    /// 按稳定 ID 提交字段编辑；只有磁盘确认成功后才替换应用快照。
+    /// 按稳定 ID 提交字段和分类编辑；只有整份候选经磁盘确认后才替换应用快照。
     pub fn update_account(
         &self,
         id: &str,
         input: UpdateAccountInput,
     ) -> Result<VaultSnapshot, VaultApplicationError> {
         let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
+        let category_id = input
+            .category_id
+            .as_deref()
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|_| VaultApplicationError::CategoryNotFound)?;
         let mut state = self
             .state
             .lock()
@@ -296,6 +304,10 @@ impl VaultApplication {
                 },
             )
             .map_err(map_update_account_error)?;
+        // 分类存在性在持锁后的当前候选上重新验证，不能相信前端较早取得的分类列表。
+        candidate
+            .move_account(account_id, category_id)
+            .map_err(map_move_account_error)?;
         candidate.revision = candidate
             .revision
             .checked_add(1)
@@ -332,6 +344,13 @@ fn map_update_account_error(error: UpdateAccountError) -> VaultApplicationError 
         UpdateAccountError::NotFound => VaultApplicationError::AccountNotFound,
         UpdateAccountError::UsernameRequired => VaultApplicationError::AccountUsernameRequired,
         UpdateAccountError::PasswordRequired => VaultApplicationError::AccountPasswordRequired,
+    }
+}
+
+fn map_move_account_error(error: MoveAccountError) -> VaultApplicationError {
+    match error {
+        MoveAccountError::AccountNotFound => VaultApplicationError::AccountNotFound,
+        MoveAccountError::CategoryNotFound => VaultApplicationError::CategoryNotFound,
     }
 }
 
@@ -709,9 +728,13 @@ mod tests {
     #[test]
     fn update_account_publishes_once_and_failure_keeps_confirmed_snapshot() {
         let mut document = VaultDocument::empty();
+        let source = document.create_category("工作").expect("源分类应创建成功");
+        let target_category = document
+            .create_category("个人")
+            .expect("目标分类应创建成功");
         let target = document
             .create_account(CreateAccount {
-                category_id: None,
+                category_id: Some(source.id),
                 username: "旧账号".to_owned(),
                 password: "旧密码".to_owned(),
                 address: None,
@@ -724,6 +747,7 @@ mod tests {
             .update_account(
                 &target.id.to_string(),
                 UpdateAccountInput {
+                    category_id: Some(target_category.id.to_string()),
                     username: "新账号".to_owned(),
                     password: "新密码".to_owned(),
                     address: Some("https://new.invalid".to_owned()),
@@ -735,6 +759,12 @@ mod tests {
 
         assert_eq!(updated.revision, 1);
         assert_eq!(updated.accounts[0].username, "新账号");
+        assert_eq!(
+            updated.accounts[0].category_id,
+            Some(target_category.id.to_string())
+        );
+        assert_eq!(updated.categories[0].account_count, 0);
+        assert_eq!(updated.categories[1].account_count, 1);
         assert_eq!(save_count.load(Ordering::SeqCst), 1);
         assert_eq!(
             application
@@ -750,6 +780,7 @@ mod tests {
             failing.update_account(
                 &target.id.to_string(),
                 UpdateAccountInput {
+                    category_id: None,
                     username: "不会保存".to_owned(),
                     password: "不会保存".to_owned(),
                     address: None,
@@ -761,5 +792,81 @@ mod tests {
         );
         assert_eq!(failing.snapshot().expect("快照应可读取"), before);
         assert_eq!(failing_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn update_account_rejects_unknown_category_before_save_and_keeps_all_fields() {
+        let mut document = VaultDocument::empty();
+        let target = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "旧账号".to_owned(),
+                password: "旧密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("目标账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+        let before = application.snapshot().expect("旧快照应可读取");
+
+        assert_eq!(
+            application.update_account(
+                &target.id.to_string(),
+                UpdateAccountInput {
+                    category_id: Some(Uuid::new_v4().to_string()),
+                    username: "不能部分保存".to_owned(),
+                    password: "不能部分保存".to_owned(),
+                    address: Some("https://new.invalid".to_owned()),
+                    email: None,
+                    notes: None,
+                },
+            ),
+            Err(VaultApplicationError::CategoryNotFound)
+        );
+        assert_eq!(application.snapshot().expect("快照应可读取"), before);
+        assert_eq!(save_count.load(Ordering::SeqCst), 0);
+        let detail = application
+            .account_for_edit(&target.id.to_string())
+            .expect("旧详情应可读取");
+        assert_eq!(detail.username, "旧账号");
+        assert_eq!(detail.password, "旧密码");
+        assert_eq!(detail.category_id, None);
+    }
+
+    #[test]
+    fn update_account_can_move_to_uncategorized_and_updates_counts() {
+        let mut document = VaultDocument::empty();
+        let category = document.create_category("工作").expect("分类应创建成功");
+        let target = document
+            .create_account(CreateAccount {
+                category_id: Some(category.id),
+                username: "工作账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("目标账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+
+        let updated = application
+            .update_account(
+                &target.id.to_string(),
+                UpdateAccountInput {
+                    category_id: None,
+                    username: "工作账号".to_owned(),
+                    password: "测试密码".to_owned(),
+                    address: None,
+                    email: None,
+                    notes: None,
+                },
+            )
+            .expect("账号应移动到未分类");
+
+        assert_eq!(updated.categories[0].account_count, 0);
+        assert_eq!(updated.uncategorized_count, 1);
+        assert_eq!(updated.accounts[0].category_id, None);
+        assert_eq!(save_count.load(Ordering::SeqCst), 1);
     }
 }

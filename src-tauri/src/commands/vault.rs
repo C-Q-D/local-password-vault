@@ -50,10 +50,11 @@ pub(crate) struct AccountEditDto {
     notes: Option<String>,
 }
 
-/// 编辑请求不包含账号 ID 和分类，定位 ID 作为独立 command 参数传入。
+/// 编辑请求不包含账号 ID；字段和分类由应用层一次保存。
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct UpdateAccountDto {
+    category_id: Option<String>,
     username: String,
     password: String,
     address: Option<String>,
@@ -267,6 +268,7 @@ pub(crate) fn update_account(
         .update_account(
             &id,
             UpdateAccountInput {
+                category_id: input.category_id,
                 username: input.username,
                 password: input.password,
                 address: input.address,

@@ -232,6 +232,7 @@
     accountSubmitting = true;
     try {
       const fields = {
+        categoryId: accountDraft.categoryId === "uncategorized" ? null : accountDraft.categoryId,
         username: accountDraft.username,
         password: accountDraft.password,
         address: optionalField(accountDraft.address),
@@ -240,10 +241,7 @@
       };
       vault = accountDialogMode === "edit" && editingAccountId
         ? await updateAccount(editingAccountId, fields)
-        : await createAccount({
-            ...fields,
-            categoryId: accountDraft.categoryId === "uncategorized" ? null : accountDraft.categoryId,
-          });
+        : await createAccount(fields);
       const edited = accountDialogMode === "edit";
       accountDialogOpen = false;
       accountDialogMode = "create";
