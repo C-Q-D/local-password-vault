@@ -271,6 +271,8 @@ svg {
 
 .main-wrap {
   min-width: 0;
+  /* Grid 子项必须允许纵向收缩，超出内容才能交给内部滚动容器处理。 */
+  min-height: 0;
   height: 100%;
   padding: 12px;
 }
