@@ -9,5 +9,7 @@ mod key_protection;
 pub use envelope::{MAX_ENVELOPE_SIZE, open, seal};
 pub use error::{EnvelopeError, KeyProtectionError, VaultFileError, VaultOpenError};
 pub use file_access::VaultFiles;
-pub use initialization::{OpenedVault, open_or_initialize, save_confirmed};
+pub use initialization::{
+    OpenedVault, VaultStartup, open_or_initialize, probe_or_initialize, save_confirmed,
+};
 pub use key_protection::{DataKey, KeyProtector};

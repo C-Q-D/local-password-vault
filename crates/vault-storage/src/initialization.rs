@@ -11,36 +11,54 @@ pub struct OpenedVault {
     pub initialized: bool,
 }
 
-/// 加载已有主库，或者只在主库确实不存在时创建并重新确认空库。
+/// 启动探测只返回安全状态；待恢复和不可用状态都不携带文件内容。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VaultStartup {
+    Ready(OpenedVault),
+    RecoveryRequired,
+    Unavailable,
+}
+
+/// 分别认证主库和备份；只有两份文件都明确不存在时才创建空库。
+pub fn probe_or_initialize(
+    files: &impl VaultFiles,
+    key_protector: &impl KeyProtector,
+) -> Result<VaultStartup, VaultOpenError> {
+    let main = files.read_main();
+    if let Ok(envelope) = &main
+        && let Ok(opened) = open_confirmed(envelope, key_protector, false)
+    {
+        return Ok(VaultStartup::Ready(opened));
+    }
+
+    let backup = match files.read_backup() {
+        Ok(envelope) => {
+            return Ok(if open_confirmed(&envelope, key_protector, false).is_ok() {
+                VaultStartup::RecoveryRequired
+            } else {
+                VaultStartup::Unavailable
+            });
+        }
+        Err(error) => error,
+    };
+
+    if matches!(main, Err(VaultFileError::NotFound)) && backup == VaultFileError::NotFound {
+        return initialize(files, key_protector).map(VaultStartup::Ready);
+    }
+
+    Ok(VaultStartup::Unavailable)
+}
+
+/// 兼容现有 Ready 调用方；LPV-13 后续原子会直接消费完整启动状态。
 pub fn open_or_initialize(
     files: &impl VaultFiles,
     key_protector: &impl KeyProtector,
 ) -> Result<OpenedVault, VaultOpenError> {
-    match files.read_main() {
-        Ok(envelope) => match open_confirmed(&envelope, key_protector, false) {
-            Ok(opened) => Ok(opened),
-            Err(main_error) => recover_backup(files, key_protector)?.ok_or(main_error),
-        },
-        Err(VaultFileError::NotFound) => recover_backup(files, key_protector)?
-            .map_or_else(|| initialize(files, key_protector), Ok),
-        Err(error) => recover_backup(files, key_protector)?.ok_or(VaultOpenError::File(error)),
+    match probe_or_initialize(files, key_protector)? {
+        VaultStartup::Ready(opened) => Ok(opened),
+        VaultStartup::RecoveryRequired => Err(VaultOpenError::RecoveryRequired),
+        VaultStartup::Unavailable => Err(VaultOpenError::Unavailable),
     }
-}
-
-/// 备份必须先通过完整认证和领域校验，之后才允许恢复为主库。
-fn recover_backup(
-    files: &impl VaultFiles,
-    key_protector: &impl KeyProtector,
-) -> Result<Option<OpenedVault>, VaultOpenError> {
-    let backup = match files.read_backup() {
-        Ok(backup) => backup,
-        Err(VaultFileError::NotFound) => return Ok(None),
-        Err(error) => return Err(VaultOpenError::File(error)),
-    };
-    open_confirmed(&backup, key_protector, false)?;
-    files.restore_main(&backup).map_err(VaultOpenError::File)?;
-    let restored = files.read_main().map_err(VaultOpenError::File)?;
-    Ok(Some(open_confirmed(&restored, key_protector, false)?))
 }
 
 /// 先认证即将提交的完整信封，再原子替换主库并返回该确认文档。
@@ -93,7 +111,10 @@ fn open_confirmed(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     use crate::{DataKey, KeyProtectionError};
     use zeroize::Zeroizing;
@@ -105,6 +126,7 @@ mod tests {
         main: Mutex<Option<Vec<u8>>>,
         backup: Mutex<Option<Vec<u8>>>,
         fail_replace: bool,
+        restore_calls: AtomicUsize,
     }
 
     impl VaultFiles for MemoryFiles {
@@ -146,6 +168,7 @@ mod tests {
         }
 
         fn restore_main(&self, candidate: &[u8]) -> Result<(), VaultFileError> {
+            self.restore_calls.fetch_add(1, Ordering::SeqCst);
             *self.main.lock().expect("测试互斥锁不应中毒") = Some(candidate.to_vec());
             Ok(())
         }
@@ -198,7 +221,7 @@ mod tests {
 
         assert!(matches!(
             open_or_initialize(&files, &TestKeyProtector),
-            Err(VaultOpenError::Envelope(_))
+            Err(VaultOpenError::Unavailable)
         ));
         assert_eq!(
             files.read_main().expect("损坏主库仍应原样存在"),
@@ -282,6 +305,7 @@ mod tests {
             main: Mutex::new(Some(previous.clone())),
             backup: Mutex::new(None),
             fail_replace: true,
+            restore_calls: AtomicUsize::new(0),
         };
         let mut candidate = VaultDocument::empty();
         candidate.revision = 1;
@@ -294,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_backup_restores_a_corrupted_main() {
+    fn valid_backup_requires_confirmation_without_restoring_corrupted_main() {
         let mut recovered_document = VaultDocument::empty();
         recovered_document.revision = 3;
         recovered_document
@@ -307,9 +331,61 @@ mod tests {
             ..MemoryFiles::default()
         };
 
-        let opened = open_or_initialize(&files, &TestKeyProtector).expect("有效备份应恢复主库");
+        assert_eq!(
+            probe_or_initialize(&files, &TestKeyProtector),
+            Ok(VaultStartup::RecoveryRequired)
+        );
+        assert_eq!(files.read_main(), Ok(b"corrupted-main".to_vec()));
+        assert_eq!(files.read_backup(), Ok(backup));
+        assert_eq!(files.restore_calls.load(Ordering::SeqCst), 0);
+    }
 
-        assert_eq!(opened.document, recovered_document);
-        assert_eq!(files.read_main(), Ok(backup));
+    #[test]
+    fn valid_backup_requires_confirmation_when_main_is_missing() {
+        let backup = seal(&VaultDocument::empty(), &TestKeyProtector).expect("测试备份应生成");
+        let files = MemoryFiles {
+            backup: Mutex::new(Some(backup.clone())),
+            ..MemoryFiles::default()
+        };
+
+        assert_eq!(
+            probe_or_initialize(&files, &TestKeyProtector),
+            Ok(VaultStartup::RecoveryRequired)
+        );
+        assert_eq!(files.read_main(), Err(VaultFileError::NotFound));
+        assert_eq!(files.read_backup(), Ok(backup));
+        assert_eq!(files.restore_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn invalid_main_and_backup_are_unavailable_without_writing() {
+        let files = MemoryFiles {
+            main: Mutex::new(Some(b"corrupted-main".to_vec())),
+            backup: Mutex::new(Some(b"corrupted-backup".to_vec())),
+            ..MemoryFiles::default()
+        };
+
+        assert_eq!(
+            probe_or_initialize(&files, &TestKeyProtector),
+            Ok(VaultStartup::Unavailable)
+        );
+        assert_eq!(files.read_main(), Ok(b"corrupted-main".to_vec()));
+        assert_eq!(files.read_backup(), Ok(b"corrupted-backup".to_vec()));
+        assert_eq!(files.restore_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn corrupted_main_without_backup_is_unavailable_without_initializing() {
+        let files = MemoryFiles {
+            main: Mutex::new(Some(b"corrupted-main".to_vec())),
+            ..MemoryFiles::default()
+        };
+
+        assert_eq!(
+            probe_or_initialize(&files, &TestKeyProtector),
+            Ok(VaultStartup::Unavailable)
+        );
+        assert_eq!(files.read_main(), Ok(b"corrupted-main".to_vec()));
+        assert_eq!(files.restore_calls.load(Ordering::SeqCst), 0);
     }
 }

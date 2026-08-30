@@ -22,7 +22,7 @@
 
 ## LPV-13-01 启动探测主库与备份状态
 
-- 状态：in_progress
+- 状态：done
 - 支持的验收场景：main 有效正常载入；main 无效或缺失且 backup 有效进入待恢复；两者无效进入不可用；两者都不存在才初始化空库。
 - 唯一目标：`vault-storage` 在启动时返回明确状态且不自动恢复 backup。
 - 当前行为与目标行为：当前有效 backup 会立即写回 main；完成后启动只读取和认证，RecoveryRequired 与 Unavailable 均不写盘。
@@ -42,6 +42,10 @@
 - 风险等级：L3。
 - DDD 门禁：实现前隔离审查“任何损坏或不可认证痕迹都不会进入空库初始化或写盘”。
 - 计划提交信息：`feat(storage): [LPV-13-01] 判定主库与备份启动状态`。
+
+### 执行记录
+
+- 实际验证：隔离反证定位到旧自动恢复路径并裁决为 FIX_CURRENT；修正后 10 项 `vault-storage` 初始化测试通过，覆盖有效 main、全新初始化、损坏/缺失 main + 有效 backup、双损坏和无 backup，非 Ready 路径写调用为 0；Crate check、格式检查和 diff 检查通过。
 
 ## LPV-13-02 显式恢复已认证备份
 

@@ -84,4 +84,8 @@ pub enum VaultOpenError {
     File(VaultFileError),
     #[error("密码库内容不可用：{0}")]
     Envelope(EnvelopeError),
+    #[error("密码库需要用户确认后从备份恢复")]
+    RecoveryRequired,
+    #[error("主密码库和备份都不可用")]
+    Unavailable,
 }
