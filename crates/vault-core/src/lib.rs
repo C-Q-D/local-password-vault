@@ -4,9 +4,10 @@ mod error;
 mod vault;
 
 pub use error::{
-    AccountError, CategoryError, DeleteAccountError, MoveAccountError, UpdateAccountError,
-    VaultValidationError,
+    AccountError, CategoryError, DeleteAccountError, MoveAccountError, SearchAccountError,
+    UpdateAccountError, VaultValidationError,
 };
 pub use vault::{
-    Account, CURRENT_SCHEMA_VERSION, Category, CreateAccount, UpdateAccount, VaultDocument,
+    Account, AccountSearchResult, AccountSearchScope, CURRENT_SCHEMA_VERSION, Category,
+    CreateAccount, UpdateAccount, VaultDocument,
 };

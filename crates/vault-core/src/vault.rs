@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    AccountError, CategoryError, DeleteAccountError, MoveAccountError, UpdateAccountError,
-    VaultValidationError,
+    AccountError, CategoryError, DeleteAccountError, MoveAccountError, SearchAccountError,
+    UpdateAccountError, VaultValidationError,
 };
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
@@ -192,6 +192,37 @@ impl VaultDocument {
         Ok(())
     }
 
+    /// 在当前确认文档中搜索账号，并只返回列表展示所需的安全字段。
+    pub fn search_accounts(
+        &self,
+        query: &str,
+        scope: AccountSearchScope,
+    ) -> Result<Vec<AccountSearchResult>, SearchAccountError> {
+        if let AccountSearchScope::Category(category_id) = scope
+            && !self
+                .categories
+                .iter()
+                .any(|category| category.id == category_id)
+        {
+            return Err(SearchAccountError::CategoryNotFound);
+        }
+
+        let normalized_query = query.trim().to_lowercase();
+        Ok(self
+            .accounts
+            .iter()
+            .filter(|account| match scope {
+                AccountSearchScope::All => true,
+                AccountSearchScope::Uncategorized => account.category_id.is_none(),
+                AccountSearchScope::Category(category_id) => {
+                    account.category_id == Some(category_id)
+                }
+            })
+            .filter(|account| account_matches_query(account, &normalized_query))
+            .map(AccountSearchResult::from)
+            .collect())
+    }
+
     /// 校验载入和保存共同依赖的领域不变量。
     ///
     /// 校验集中在这里，避免不同读写路径对损坏数据作出不一致判断。
@@ -266,6 +297,36 @@ pub struct Account {
     pub notes: Option<String>,
 }
 
+/// 账号搜索的范围；用户分类始终使用稳定 UUID。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountSearchScope {
+    All,
+    Uncategorized,
+    Category(Uuid),
+}
+
+/// 搜索结果只包含列表展示字段，密码和备注不会离开核心搜索边界。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountSearchResult {
+    pub id: Uuid,
+    pub category_id: Option<Uuid>,
+    pub username: String,
+    pub address: Option<String>,
+    pub email: Option<String>,
+}
+
+impl From<&Account> for AccountSearchResult {
+    fn from(account: &Account) -> Self {
+        Self {
+            id: account.id,
+            category_id: account.category_id,
+            username: account.username.clone(),
+            address: account.address.clone(),
+            email: account.email.clone(),
+        }
+    }
+}
+
 /// 新增账号所需的领域输入；由调用方决定空的可选字段使用 None 还是空字符串。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateAccount {
@@ -285,6 +346,27 @@ pub struct UpdateAccount {
     pub address: Option<String>,
     pub email: Option<String>,
     pub notes: Option<String>,
+}
+
+fn account_matches_query(account: &Account, normalized_query: &str) -> bool {
+    if normalized_query.is_empty() {
+        return true;
+    }
+
+    // 明确列出允许搜索的四个字段，避免整个 Account 序列化或密码字段误入匹配范围。
+    account.username.to_lowercase().contains(normalized_query)
+        || account
+            .address
+            .as_deref()
+            .is_some_and(|value| value.to_lowercase().contains(normalized_query))
+        || account
+            .email
+            .as_deref()
+            .is_some_and(|value| value.to_lowercase().contains(normalized_query))
+        || account
+            .notes
+            .as_deref()
+            .is_some_and(|value| value.to_lowercase().contains(normalized_query))
 }
 
 #[cfg(test)]
@@ -770,6 +852,113 @@ mod tests {
             Err(DeleteAccountError::NotFound)
         );
         assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn search_accounts_matches_only_allowed_fields_case_insensitively() {
+        let mut document = VaultDocument::empty();
+        let category = document
+            .create_category("工作分类")
+            .expect("分类应创建成功");
+        let accounts = [
+            ("GitHub Account", None, None, None, "secret-one"),
+            (
+                "地址账号",
+                Some("https://portal.example.invalid/path"),
+                None,
+                None,
+                "secret-two",
+            ),
+            (
+                "邮箱账号",
+                None,
+                Some("Person@Example.Invalid"),
+                None,
+                "secret-three",
+            ),
+            (
+                "备注账号",
+                None,
+                None,
+                Some("仅用于 Finance 项目"),
+                "secret-four",
+            ),
+        ];
+        for (username, address, email, notes, password) in accounts {
+            document
+                .create_account(CreateAccount {
+                    category_id: Some(category.id),
+                    username: username.to_owned(),
+                    password: password.to_owned(),
+                    address: address.map(str::to_owned),
+                    email: email.map(str::to_owned),
+                    notes: notes.map(str::to_owned),
+                })
+                .expect("测试账号应创建成功");
+        }
+
+        let usernames = |query: &str| {
+            document
+                .search_accounts(query, AccountSearchScope::All)
+                .expect("搜索应成功")
+                .into_iter()
+                .map(|account| account.username)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(usernames("github"), vec!["GitHub Account"]);
+        assert_eq!(usernames("PORTAL.EXAMPLE"), vec!["地址账号"]);
+        assert_eq!(usernames("person@example"), vec!["邮箱账号"]);
+        assert_eq!(usernames("FINANCE"), vec!["备注账号"]);
+        assert!(usernames("secret-three").is_empty());
+        assert!(usernames("工作分类").is_empty());
+        assert!(usernames("不存在").is_empty());
+    }
+
+    #[test]
+    fn search_accounts_respects_all_category_and_uncategorized_scopes() {
+        let mut document = VaultDocument::empty();
+        let work = document
+            .create_category("工作")
+            .expect("工作分类应创建成功");
+        let personal = document
+            .create_category("个人")
+            .expect("个人分类应创建成功");
+        for (username, category_id) in [
+            ("工作账号", Some(work.id)),
+            ("个人账号", Some(personal.id)),
+            ("未分类账号", None),
+        ] {
+            document
+                .create_account(CreateAccount {
+                    category_id,
+                    username: username.to_owned(),
+                    password: "测试密码".to_owned(),
+                    address: None,
+                    email: None,
+                    notes: None,
+                })
+                .expect("测试账号应创建成功");
+        }
+
+        let all = document
+            .search_accounts("  ", AccountSearchScope::All)
+            .expect("空查询应返回全部账号");
+        let work_only = document
+            .search_accounts("账号", AccountSearchScope::Category(work.id))
+            .expect("分类搜索应成功");
+        let uncategorized = document
+            .search_accounts("账号", AccountSearchScope::Uncategorized)
+            .expect("未分类搜索应成功");
+
+        assert_eq!(all.len(), 3);
+        assert_eq!(work_only.len(), 1);
+        assert_eq!(work_only[0].username, "工作账号");
+        assert_eq!(uncategorized.len(), 1);
+        assert_eq!(uncategorized[0].username, "未分类账号");
+        assert_eq!(
+            document.search_accounts("账号", AccountSearchScope::Category(Uuid::new_v4())),
+            Err(SearchAccountError::CategoryNotFound)
+        );
     }
 
     #[test]

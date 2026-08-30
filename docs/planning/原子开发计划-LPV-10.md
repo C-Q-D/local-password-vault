@@ -21,7 +21,7 @@
 
 ## LPV-10-01 在确认文档中搜索安全账号结果
 
-- 状态：in_progress
+- 状态：done
 - 唯一目标：`vault-core` 按 query 和 All/Uncategorized/Category(UUID) 范围返回安全账号结果。
 - 允许修改：搜索范围、结果类型、错误、领域行为和单元测试。
 - 明确不修改：应用层、持久化、Tauri、前端、模糊搜索和排序。
@@ -33,9 +33,14 @@
 - DDD 门禁：实现前隔离质疑“搜索所有可达匹配路径都不会读取或返回密码字段”。
 - 计划提交信息：`feat(core): [LPV-10-01] 支持安全账号搜索`
 
+### 执行记录
+
+- 实际验证：四字段、大小写、密码和分类名排除、三种范围、空查询、无结果及未知分类共 2 项定向测试通过；`cargo check -p vault-core`、格式和差异检查通过。
+- DDD 结果：PASS。专用结果只包含列表字段，匹配逻辑显式列出账号名、地址、邮箱和备注，不读取密码或分类名称。
+
 ## LPV-10-02 暴露只读账号搜索命令
 
-- 状态：pending
+- 状态：in_progress
 - 唯一目标：应用层、Tauri 和 TypeScript 提供 `searchAccounts(query, scope)`，返回当前 revision 和安全结果。
 - 允许修改：应用只读用例、搜索响应 DTO、Tauri command、TypeScript 调用和相关测试。
 - 明确不修改：写盘、索引缓存、Svelte 输入和密码详情接口。

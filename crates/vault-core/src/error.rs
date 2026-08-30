@@ -73,3 +73,10 @@ pub enum DeleteAccountError {
     #[error("账号不存在")]
     NotFound,
 }
+
+/// 账号搜索范围无效时返回的稳定错误。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum SearchAccountError {
+    #[error("账号分类不存在")]
+    CategoryNotFound,
+}
