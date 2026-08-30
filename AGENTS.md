@@ -6,6 +6,7 @@
 | 计划 ID | 类型 | 文档 |
 |---|---|---|
 | SCOPE-LPV-MVP-001 | 产品拆分 | [本地密码库 MVP 开发计划](docs/planning/开发计划.md) |
+| ATOMIC-LPV-11-USAGE-001 | 原子开发 | [LPV-11 复制后更新最近使用时间原子计划](docs/planning/原子开发计划-LPV-11-最近使用.md) |
 
 <!-- codex-plan-index:end -->
 
