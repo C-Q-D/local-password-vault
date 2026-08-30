@@ -1,6 +1,6 @@
 //! 用例编排与已确认内存快照的所有权边界。Tauri command 只调用这里暴露的用例。
 
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 
 use uuid::Uuid;
 use vault_core::{
@@ -618,6 +618,19 @@ fn map_search_account_error(error: SearchAccountError) -> VaultApplicationError 
 }
 
 fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
+    let mut category_counts =
+        HashMap::<Uuid, usize>::with_capacity(state.document.categories.len());
+    let mut uncategorized_count = 0;
+
+    // 一次遍历完成全部分类计数，避免每个分类再次扫描所有账号。
+    for account in &state.document.accounts {
+        if let Some(category_id) = account.category_id {
+            *category_counts.entry(category_id).or_default() += 1;
+        } else {
+            uncategorized_count += 1;
+        }
+    }
+
     let categories = state
         .document
         .categories
@@ -625,12 +638,10 @@ fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
         .map(|category| CategorySummary {
             id: category.id.to_string(),
             name: category.name.clone(),
-            account_count: state
-                .document
-                .accounts
-                .iter()
-                .filter(|account| account.category_id == Some(category.id))
-                .count(),
+            account_count: category_counts
+                .get(&category.id)
+                .copied()
+                .unwrap_or_default(),
         })
         .collect::<Vec<_>>();
 
@@ -641,12 +652,7 @@ fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
         account_count: state.document.accounts.len(),
         initialized: state.initialized,
         categories,
-        uncategorized_count: state
-            .document
-            .accounts
-            .iter()
-            .filter(|account| account.category_id.is_none())
-            .count(),
+        uncategorized_count,
         accounts: state
             .document
             .accounts
@@ -789,6 +795,56 @@ mod tests {
 
         drop(application);
         assert!(dropped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn snapshot_counts_fifty_categories_and_one_thousand_accounts() {
+        let mut document = VaultDocument::empty();
+        let category_ids = (0..50)
+            .map(|index| {
+                document
+                    .create_category(&format!("模拟分类 {index}"))
+                    .expect("隔离测试分类应创建成功")
+                    .id
+            })
+            .collect::<Vec<_>>();
+
+        for index in 0..1000 {
+            // 每十个账号留一个未分类，最后一个分类刻意保持为空。
+            let category_id = (index % 10 != 0).then(|| category_ids[index % 49]);
+            document.accounts.push(Account {
+                id: Uuid::new_v4(),
+                category_id,
+                username: format!("模拟账号 {index}"),
+                password: "仅用于隔离测试".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+                last_used_at: None,
+            });
+        }
+
+        let (application, _, _) = application_with_document(false, document);
+        let snapshot = application.snapshot().expect("1000 账号快照应可读取");
+
+        assert_eq!(snapshot.category_count, 50);
+        assert_eq!(snapshot.account_count, 1000);
+        assert_eq!(snapshot.uncategorized_count, 100);
+        assert_eq!(snapshot.categories[49].account_count, 0);
+        assert_eq!(
+            snapshot
+                .categories
+                .iter()
+                .map(|category| category.account_count)
+                .sum::<usize>(),
+            900
+        );
+        for (category_index, category) in snapshot.categories.iter().take(49).enumerate() {
+            let expected = (0..1000)
+                .filter(|index| index % 10 != 0 && index % 49 == category_index)
+                .count();
+            assert_eq!(category.account_count, expected);
+        }
     }
 
     #[test]
