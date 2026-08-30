@@ -9,5 +9,5 @@ pub use error::{
 };
 pub use vault::{
     Account, AccountSearchResult, AccountSearchScope, CURRENT_SCHEMA_VERSION, Category,
-    CreateAccount, UpdateAccount, VaultDocument,
+    CreateAccount, UpdateAccount, UsageEvent, UsageEventKind, VaultDocument,
 };

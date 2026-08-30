@@ -5,6 +5,7 @@ use vault_app::{
     CategorySummary, CreateAccountInput, CredentialField, UpdateAccountInput, VaultApplication,
     VaultApplicationError, VaultApplicationStatus, VaultSnapshot,
 };
+use vault_core::UsageEventKind;
 
 #[cfg(target_os = "windows")]
 use std::{
@@ -405,7 +406,7 @@ pub(crate) fn copy_account_username(
         .copy_text(&username)
         .map_err(CommandErrorDto::from)?;
     application
-        .record_account_used(&id, unix_time_millis())
+        .record_account_used(&id, unix_time_millis(), UsageEventKind::AccountUse)
         .map(VaultStatusDto::from)
         .map_err(CommandErrorDto::from)
 }
@@ -432,7 +433,7 @@ pub(crate) fn copy_account_password(
         let _ = receipt.clear_if_owned();
     });
     application
-        .record_account_used(&id, unix_time_millis())
+        .record_account_used(&id, unix_time_millis(), UsageEventKind::PasswordCopy)
         .map(VaultStatusDto::from)
         .map_err(CommandErrorDto::from)
 }

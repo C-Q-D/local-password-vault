@@ -11,6 +11,9 @@ use crate::{
 /// 当前代码能够完整理解和校验的密码库结构版本。
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
+/// 多保留一天滚动窗口，前端按本地时区聚合最近七个自然日时不会遗漏最早一天。
+const USAGE_EVENT_RETENTION_MILLIS: u64 = 8 * 24 * 60 * 60 * 1_000;
+
 /// 一份完整的密码库明文文档。
 ///
 /// 该结构只在内存和加密边界内使用，写入磁盘前必须由存储层加密。
@@ -20,6 +23,9 @@ pub struct VaultDocument {
     pub revision: u64,
     pub categories: Vec<Category>,
     pub accounts: Vec<Account>,
+    /// 旧密码库没有该字段时从空历史开始，不能用最后使用时间伪造次数。
+    #[serde(default)]
+    pub usage_events: Vec<UsageEvent>,
 }
 
 impl VaultDocument {
@@ -31,6 +37,7 @@ impl VaultDocument {
             revision: 0,
             categories: Vec::new(),
             accounts: Vec::new(),
+            usage_events: Vec::new(),
         }
     }
 
@@ -194,13 +201,26 @@ impl VaultDocument {
     }
 
     /// 只有凭据操作成功后才记录时间；时间由调用边界提供，便于稳定测试。
-    pub fn record_account_used(&mut self, id: Uuid, used_at: u64) -> Result<(), AccountUsageError> {
+    pub fn record_account_used(
+        &mut self,
+        id: Uuid,
+        used_at: u64,
+        kind: UsageEventKind,
+    ) -> Result<(), AccountUsageError> {
         let account = self
             .accounts
             .iter_mut()
             .find(|account| account.id == id)
             .ok_or(AccountUsageError::NotFound)?;
         account.last_used_at = Some(used_at);
+
+        let oldest_retained = used_at.saturating_sub(USAGE_EVENT_RETENTION_MILLIS);
+        self.usage_events
+            .retain(|event| event.occurred_at >= oldest_retained);
+        self.usage_events.push(UsageEvent {
+            kind,
+            occurred_at: used_at,
+        });
         Ok(())
     }
 
@@ -312,6 +332,21 @@ pub struct Account {
     pub last_used_at: Option<u64>,
 }
 
+/// 使用概览只区分成功的账号名复制和密码复制，不保存账号身份。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UsageEventKind {
+    AccountUse,
+    PasswordCopy,
+}
+
+/// 一次成功的凭据复制事件；内容刻意限制为图表需要的最少字段。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageEvent {
+    pub kind: UsageEventKind,
+    pub occurred_at: u64,
+}
+
 /// 账号搜索的范围；用户分类始终使用稳定 UUID。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccountSearchScope {
@@ -416,6 +451,61 @@ mod tests {
         let loaded: VaultDocument = serde_json::from_value(value).expect("旧账号文档应继续可读取");
 
         assert_eq!(loaded.accounts[0].last_used_at, None);
+    }
+
+    #[test]
+    fn document_without_usage_events_remains_compatible() {
+        let mut value = serde_json::to_value(VaultDocument::empty()).expect("测试文档应可序列化");
+        value
+            .as_object_mut()
+            .expect("密码库应为对象")
+            .remove("usage_events");
+
+        let loaded: VaultDocument = serde_json::from_value(value).expect("旧密码库应继续可读取");
+
+        assert!(loaded.usage_events.is_empty());
+    }
+
+    #[test]
+    fn record_account_usage_distinguishes_copy_kind_and_discards_expired_events() {
+        let mut document = VaultDocument::empty();
+        let account = valid_account(None);
+        let account_id = account.id;
+        document.accounts.push(account);
+        let now = USAGE_EVENT_RETENTION_MILLIS + 10;
+        document.usage_events = vec![UsageEvent {
+            kind: UsageEventKind::AccountUse,
+            occurred_at: 9,
+        }];
+
+        document
+            .record_account_used(account_id, now, UsageEventKind::PasswordCopy)
+            .expect("已存在账号应记录成功");
+
+        assert_eq!(document.accounts[0].last_used_at, Some(now));
+        assert_eq!(
+            document.usage_events,
+            vec![UsageEvent {
+                kind: UsageEventKind::PasswordCopy,
+                occurred_at: now,
+            }]
+        );
+    }
+
+    #[test]
+    fn unknown_account_does_not_change_usage_history() {
+        let mut document = VaultDocument::empty();
+        document.usage_events.push(UsageEvent {
+            kind: UsageEventKind::AccountUse,
+            occurred_at: 12,
+        });
+        let before = document.clone();
+
+        assert_eq!(
+            document.record_account_used(Uuid::new_v4(), 20, UsageEventKind::AccountUse),
+            Err(AccountUsageError::NotFound)
+        );
+        assert_eq!(document, before);
     }
 
     #[test]
@@ -565,6 +655,10 @@ mod tests {
             revision: 7,
             accounts: vec![valid_account(Some(category.id))],
             categories: vec![category],
+            usage_events: vec![UsageEvent {
+                kind: UsageEventKind::AccountUse,
+                occurred_at: 1_700_000_000_123,
+            }],
         };
 
         let json = serde_json::to_vec(&document).expect("测试文档应能序列化");

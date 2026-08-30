@@ -5,7 +5,8 @@ use std::sync::Mutex;
 use uuid::Uuid;
 use vault_core::{
     AccountError, AccountSearchScope, CategoryError, CreateAccount, DeleteAccountError,
-    MoveAccountError, SearchAccountError, UpdateAccount, UpdateAccountError, VaultDocument,
+    MoveAccountError, SearchAccountError, UpdateAccount, UpdateAccountError, UsageEventKind,
+    VaultDocument,
 };
 use vault_storage::{OpenedVault, VaultOpenError, VaultStartup};
 
@@ -427,6 +428,7 @@ impl VaultApplication {
         &self,
         id: &str,
         used_at: u64,
+        kind: UsageEventKind,
     ) -> Result<VaultSnapshot, VaultApplicationError> {
         let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
         let mut state = self
@@ -436,7 +438,7 @@ impl VaultApplication {
         let state = state.confirmed_mut()?;
         let mut candidate = state.document.clone();
         candidate
-            .record_account_used(account_id, used_at)
+            .record_account_used(account_id, used_at, kind)
             .map_err(|_| VaultApplicationError::AccountNotFound)?;
         candidate.revision = candidate
             .revision
@@ -1400,10 +1402,28 @@ mod tests {
         let (application, _, save_count) = application_with_document(false, document);
 
         let updated = application
-            .record_account_used(&target.id.to_string(), 1_700_000_000_123)
+            .record_account_used(
+                &target.id.to_string(),
+                1_700_000_000_123,
+                UsageEventKind::PasswordCopy,
+            )
             .expect("复制成功后应记录最近使用时间");
 
         assert_eq!(updated.accounts[0].last_used_at, Some(1_700_000_000_123));
+        assert_eq!(
+            application
+                .state
+                .lock()
+                .expect("状态锁应可用")
+                .confirmed()
+                .expect("应为确认状态")
+                .document
+                .usage_events,
+            vec![vault_core::UsageEvent {
+                kind: UsageEventKind::PasswordCopy,
+                occurred_at: 1_700_000_000_123,
+            }]
+        );
         assert_eq!(updated.revision, 1);
         assert_eq!(save_count.load(Ordering::SeqCst), 1);
         assert_eq!(application.snapshot().expect("快照应可读取"), updated);
@@ -1426,7 +1446,11 @@ mod tests {
         let before = application.snapshot().expect("旧快照应可读取");
 
         assert_eq!(
-            application.record_account_used(&target.id.to_string(), 1_700_000_000_123),
+            application.record_account_used(
+                &target.id.to_string(),
+                1_700_000_000_123,
+                UsageEventKind::AccountUse,
+            ),
             Err(VaultApplicationError::VaultSaveFailed)
         );
         assert_eq!(application.snapshot().expect("快照应可读取"), before);
