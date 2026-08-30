@@ -173,6 +173,12 @@
     }
   }
 
+  /** 先同步输入框的新值，再发起搜索，避免事件处理早于 bind:value 更新而少搜一个字符。 */
+  function handleSearchInput(event: Event) {
+    searchQuery = (event.currentTarget as HTMLInputElement).value;
+    void runSearch();
+  }
+
   function selectCategory(categoryId: string | "uncategorized" | null) {
     selectedCategoryId = categoryId;
     if (searchQuery.trim()) void runSearch();
@@ -508,7 +514,7 @@
         <div class="topbar-actions">
           <label class="search-box" aria-label="搜索账号">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
-            <input type="search" bind:value={searchQuery} oninput={() => void runSearch()} placeholder="搜索账号名、地址、邮箱或备注" disabled={status !== "ready"} />
+            <input type="search" value={searchQuery} oninput={handleSearchInput} placeholder="搜索账号名、地址、邮箱或备注" disabled={status !== "ready"} />
           </label>
           <button class="secondary-button" type="button" onclick={refreshVault} disabled={status === "loading"}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
