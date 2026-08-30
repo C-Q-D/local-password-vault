@@ -311,7 +311,7 @@
       if (!Number.isFinite(event.occurredAt)) continue;
       const day = byKey.get(localDayKey(new Date(event.occurredAt)));
       if (!day) continue;
-      // 两种复制动作分别计数，密码复制不能同时抬高账号复制折线。
+      // 两种复制动作分别计数，密码复制不能同时抬高账号复制图形。
       if (event.kind === "accountUse") day.accountCopies += 1;
       if (event.kind === "passwordCopy") day.passwordCopies += 1;
     }
@@ -329,18 +329,25 @@
     };
   }
 
-  function usagePointX(index: number, pointCount: number): number {
-    return pointCount <= 1 ? 0 : (index / (pointCount - 1)) * 1000;
-  }
-
   function usagePointY(value: number, maximum: number): number {
     return 6 + (1 - value / maximum) * 108;
   }
 
-  function usageLinePoints(metric: "accountCopies" | "passwordCopies"): string {
-    return currentUsageChart.days
-      .map((day, index) => `${usagePointX(index, currentUsageChart.days.length)},${usagePointY(day[metric], currentUsageChart.maximum)}`)
-      .join(" ");
+  function usageBarWidth(): number {
+    const groupWidth = 1000 / currentUsageChart.days.length;
+    return Math.max(0.7, Math.min(12, groupWidth * 0.34));
+  }
+
+  function usageBarX(index: number, metric: "accountCopies" | "passwordCopies"): number {
+    const groupWidth = 1000 / currentUsageChart.days.length;
+    const barWidth = usageBarWidth();
+    const gap = Math.min(4, groupWidth * 0.08);
+    const center = (index + 0.5) * groupWidth;
+    return metric === "accountCopies" ? center - gap / 2 - barWidth : center + gap / 2;
+  }
+
+  function usageBarHeight(value: number): number {
+    return 114 - usagePointY(value, currentUsageChart.maximum);
   }
 
   function usageDateLabel(key: string): string {
@@ -348,7 +355,7 @@
     return `${year}年${Number(month)}月${Number(day)}日`;
   }
 
-  /** 只有指针靠近任一折线时才显示最近自然日的数据卡片。 */
+  /** 指针进入当天任一有效柱子的高度范围后，显示该自然日的两项数据。 */
   function handleUsageChartPointerMove(event: PointerEvent) {
     const stage = event.currentTarget as HTMLElement;
     const rect = stage.getBoundingClientRect();
@@ -356,12 +363,18 @@
 
     const localX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
     const localY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-    const index = Math.round((localX / rect.width) * (currentUsageChart.days.length - 1));
+    const index = Math.min(
+      currentUsageChart.days.length - 1,
+      Math.floor((localX / rect.width) * currentUsageChart.days.length),
+    );
     const day = currentUsageChart.days[index];
     const accountY = (usagePointY(day.accountCopies, currentUsageChart.maximum) / 120) * rect.height;
     const passwordY = (usagePointY(day.passwordCopies, currentUsageChart.maximum) / 120) * rect.height;
+    const barBottom = (114 / 120) * rect.height;
+    const accountHit = day.accountCopies > 0 && localY >= accountY - 5 && localY <= barBottom + 3;
+    const passwordHit = day.passwordCopies > 0 && localY >= passwordY - 5 && localY <= barBottom + 3;
 
-    if (Math.min(Math.abs(localY - accountY), Math.abs(localY - passwordY)) > 16) {
+    if (!accountHit && !passwordHit) {
       hoveredUsageIndex = null;
       return;
     }
@@ -375,9 +388,7 @@
   }
 
   function usageTooltipLeft(index: number): number {
-    const raw = currentUsageChart.days.length <= 1
-      ? 50
-      : (index / (currentUsageChart.days.length - 1)) * 100;
+    const raw = ((index + 0.5) / currentUsageChart.days.length) * 100;
     return Math.max(12, Math.min(88, raw));
   }
 
@@ -880,27 +891,37 @@
               </div>
             </div>
             {#if currentUsageChart.hasData}
-              <div class="overview-body" aria-label="账号复制和密码复制折线图">
+              <div class="overview-body" aria-label="账号复制和密码复制柱状图">
                 <div class="chart-grid"><span></span><span></span><span></span><span></span></div>
                 <div class="chart-labels">
                   {#each currentUsageChart.ticks as tick}<span>{tick}</span>{/each}
                 </div>
                 <div
-                  class="line-chart-stage"
+                  class="bar-chart-stage"
                   role="img"
-                  aria-label="紫色为账号复制次数，红色为密码复制次数；靠近折线可查看当日详情"
+                  aria-label="紫色为账号复制次数，红色为密码复制次数；悬停柱子可查看当日详情"
                   onpointermove={handleUsageChartPointerMove}
                   onpointerleave={clearUsageHover}
                 >
-                  <svg class="usage-lines" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
-                    <polyline class="usage-line account" points={usageLinePoints("accountCopies")} />
-                    <polyline class="usage-line password" points={usageLinePoints("passwordCopies")} />
-                    {#if hoveredUsageIndex !== null}
-                      {@const hoveredDay = currentUsageChart.days[hoveredUsageIndex]}
-                      {@const hoveredX = usagePointX(hoveredUsageIndex, currentUsageChart.days.length)}
-                      <circle class="usage-marker account" cx={hoveredX} cy={usagePointY(hoveredDay.accountCopies, currentUsageChart.maximum)} r="4" />
-                      <circle class="usage-marker password" cx={hoveredX} cy={usagePointY(hoveredDay.passwordCopies, currentUsageChart.maximum)} r="4" />
-                    {/if}
+                  <svg class="usage-bars" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+                    {#each currentUsageChart.days as day, index}
+                      <rect
+                        class="usage-bar account"
+                        x={usageBarX(index, "accountCopies")}
+                        y={usagePointY(day.accountCopies, currentUsageChart.maximum)}
+                        width={usageBarWidth()}
+                        height={usageBarHeight(day.accountCopies)}
+                        rx="2"
+                      />
+                      <rect
+                        class="usage-bar password"
+                        x={usageBarX(index, "passwordCopies")}
+                        y={usagePointY(day.passwordCopies, currentUsageChart.maximum)}
+                        width={usageBarWidth()}
+                        height={usageBarHeight(day.passwordCopies)}
+                        rx="2"
+                      />
+                    {/each}
                   </svg>
                   {#if hoveredUsageIndex !== null}
                     {@const hoveredDay = currentUsageChart.days[hoveredUsageIndex]}
