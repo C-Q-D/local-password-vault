@@ -18,6 +18,7 @@
     type AccountSummary,
     type CategorySummary,
     type CommandError,
+    type UsageEvent,
     type VaultStatus,
   } from "../lib/tauri/commands";
 
@@ -67,6 +68,23 @@
   let revealSequence = 0;
   let credentialAction: { accountId: string; kind: "username" | "password" } | null = null;
   let accountSort: "recent" | "earliest" = "recent";
+
+  type UsageDay = {
+    key: string;
+    label: string;
+    accountUses: number;
+    passwordCopies: number;
+  };
+
+  type UsageChart = {
+    days: UsageDay[];
+    ticks: number[];
+    maximum: number;
+    hasData: boolean;
+  };
+
+  let currentUsageChart: UsageChart;
+  $: currentUsageChart = usageChart(vault?.usageEvents ?? []);
 
   function emptyAccountDraft() {
     return {
@@ -259,6 +277,55 @@
       minute: "2-digit",
       hour12: false,
     }).format(new Date(lastUsedAt));
+  }
+
+  function localDayKey(date: Date): string {
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${month}-${day}`;
+  }
+
+  /** Rust 只返回最小事件摘要；自然日边界由运行界面的本地时区决定。 */
+  function usageChart(events: UsageEvent[]): UsageChart {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    const days: UsageDay[] = [];
+    const byKey = new Map<string, UsageDay>();
+
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - offset);
+      const day: UsageDay = {
+        key: localDayKey(date),
+        label: offset === 0 ? "今天" : weekdays[date.getDay()],
+        accountUses: 0,
+        passwordCopies: 0,
+      };
+      days.push(day);
+      byKey.set(day.key, day);
+    }
+
+    for (const event of events) {
+      if (!Number.isFinite(event.occurredAt)) continue;
+      const day = byKey.get(localDayKey(new Date(event.occurredAt)));
+      if (!day) continue;
+      // 密码复制本身也是一次账号使用，因此第一组柱子统计所有成功复制事件。
+      day.accountUses += 1;
+      if (event.kind === "passwordCopy") day.passwordCopies += 1;
+    }
+
+    const highest = days.reduce(
+      (maximum, day) => Math.max(maximum, day.accountUses, day.passwordCopies),
+      0,
+    );
+    const maximum = Math.max(3, Math.ceil(highest / 3) * 3);
+    return {
+      days,
+      maximum,
+      ticks: [maximum, maximum * 2 / 3, maximum / 3, 0],
+      hasData: highest > 0,
+    };
   }
 
   function accountCategoryName(categoryId: string | null): string {
@@ -743,16 +810,39 @@
             <div class="panel-head">
               <div>
                 <h2>使用概览</h2>
-                <p>查看账号使用情况</p>
+                <p>查看最近一周账号的使用情况</p>
               </div>
-              <span class="status-pill">本地加密</span>
+              <div class="overview-actions">
+                <button class="overview-refresh" type="button" onclick={refreshVault} aria-label="刷新使用概览" title="刷新使用概览">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
+                </button>
+                <span class="overview-range">近 7 天</span>
+              </div>
             </div>
-            <div class="overview-placeholder">
-              <span class="guide-line line-one"></span>
-              <span class="guide-line line-two"></span>
-              <span class="guide-line line-three"></span>
-              <span>暂无使用记录</span>
-            </div>
+            {#if currentUsageChart.hasData}
+              <div class="overview-body" aria-label="最近七天账号使用柱状图">
+                <div class="chart-grid"><span></span><span></span><span></span><span></span></div>
+                <div class="chart-labels">
+                  {#each currentUsageChart.ticks as tick}<span>{tick}</span>{/each}
+                </div>
+                <div class="chart-bars">
+                  {#each currentUsageChart.days as day}
+                    <div class="bar-group" title={`${day.label}：账号使用 ${day.accountUses} 次，密码复制 ${day.passwordCopies} 次`}>
+                      <i class="usage-bar" style={`height: ${(day.accountUses / currentUsageChart.maximum) * 100}%`}></i>
+                      <i class="usage-bar secondary" style={`height: ${(day.passwordCopies / currentUsageChart.maximum) * 100}%`}></i>
+                      <span class="bar-label">{day.label}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <div class="overview-placeholder">
+                <span class="guide-line line-one"></span>
+                <span class="guide-line line-two"></span>
+                <span class="guide-line line-three"></span>
+                <span>暂无使用记录</span>
+              </div>
+            {/if}
             <div class="overview-foot">
               <span><i></i>账号使用</span>
               <span><i class="muted"></i>密码复制</span>
