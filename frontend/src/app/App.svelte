@@ -8,7 +8,9 @@
     loadAccountForEdit,
     loadVault,
     renameCategory,
+    searchAccounts,
     updateAccount,
+    type AccountSearchScope,
     type AccountSummary,
     type CategorySummary,
     type CommandError,
@@ -48,6 +50,11 @@
   let accountPasswordVisible = false;
   let accountUsernameInput: HTMLInputElement;
   let accountDraft = emptyAccountDraft();
+  let searchQuery = "";
+  let searchResults: AccountSummary[] = [];
+  let searchStatus: "idle" | "loading" | "ready" | "error" = "idle";
+  let searchError = "";
+  let searchSequence = 0;
 
   function emptyAccountDraft() {
     return {
@@ -68,6 +75,7 @@
     try {
       vault = await loadVault();
       status = "ready";
+      if (searchQuery.trim()) await runSearch();
     } catch (error) {
       vault = null;
       status = "error";
@@ -132,7 +140,46 @@
     return selectedCategory()?.name ?? "全部账号";
   }
 
+  function currentSearchScope(): AccountSearchScope {
+    if (selectedCategoryId === "uncategorized") return { kind: "uncategorized" };
+    if (selectedCategoryId) return { kind: "category", categoryId: selectedCategoryId };
+    return { kind: "all" };
+  }
+
+  async function runSearch() {
+    const sequence = ++searchSequence;
+    const query = searchQuery.trim();
+    searchError = "";
+    if (!query) {
+      searchResults = [];
+      searchStatus = "idle";
+      return;
+    }
+
+    const scope = currentSearchScope();
+    searchResults = [];
+    searchStatus = "loading";
+    try {
+      const result = await searchAccounts(query, scope);
+      // 快速输入或切换分类后，旧请求即使较晚返回也不能覆盖当前结果。
+      if (sequence !== searchSequence) return;
+      searchResults = result.accounts;
+      searchStatus = "ready";
+    } catch (error) {
+      if (sequence !== searchSequence) return;
+      const commandError = error as Partial<CommandError> | null;
+      searchError = commandError?.message || "账号搜索失败，请重试";
+      searchStatus = "error";
+    }
+  }
+
+  function selectCategory(categoryId: string | "uncategorized" | null) {
+    selectedCategoryId = categoryId;
+    if (searchQuery.trim()) void runSearch();
+  }
+
   function visibleAccounts(): AccountSummary[] {
+    if (searchQuery.trim()) return [...searchResults].reverse();
     const accounts = vault?.accounts ?? [];
     const filtered = selectedCategoryId === null
       ? accounts
@@ -246,6 +293,7 @@
       vault = accountDialogMode === "edit" && editingAccountId
         ? await updateAccount(editingAccountId, fields)
         : await createAccount(fields);
+      if (searchQuery.trim()) await runSearch();
       const edited = accountDialogMode === "edit";
       accountDialogOpen = false;
       accountDialogMode = "create";
@@ -286,6 +334,7 @@
     try {
       const deletedUsername = pendingDeleteAccount.username;
       vault = await deleteAccount(pendingDeleteAccount.id);
+      if (searchQuery.trim()) await runSearch();
       pendingDeleteAccount = null;
       closeAccountDialog();
       showNotice(`账号“${deletedUsername}”已删除`);
@@ -363,7 +412,7 @@
     try {
       const deletedName = pendingDeleteCategory.name;
       vault = await deleteCategory(pendingDeleteCategory.id);
-      if (selectedCategoryId === pendingDeleteCategory.id) selectedCategoryId = null;
+      if (selectedCategoryId === pendingDeleteCategory.id) selectCategory(null);
       pendingDeleteCategory = null;
       showNotice(`分类“${deletedName}”已删除`);
     } catch (error) {
@@ -416,7 +465,7 @@
     </div>
 
     <p class="nav-label">密码库</p>
-    <button class:active={selectedCategoryId === null} class="nav-item" type="button" onclick={() => (selectedCategoryId = null)}>
+    <button class:active={selectedCategoryId === null} class="nav-item" type="button" onclick={() => selectCategory(null)}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></svg>
       <span>账号管理</span>
       <span class="count">{vault?.accountCount ?? 0}</span>
@@ -430,13 +479,13 @@
     </div>
     <div class="category-list">
       {#each vault?.categories ?? [] as category (category.id)}
-        <button class:active={selectedCategoryId === category.id} class="category-item" type="button" title={category.name} onclick={() => (selectedCategoryId = category.id)} oncontextmenu={(event) => openCategoryMenu(event, category)}>
+        <button class:active={selectedCategoryId === category.id} class="category-item" type="button" title={category.name} onclick={() => selectCategory(category.id)} oncontextmenu={(event) => openCategoryMenu(event, category)}>
           <span class="category-dot"></span>
           <span class="category-name">{category.name}</span>
           <span class="count">{category.accountCount}</span>
         </button>
       {/each}
-      <button class:active={selectedCategoryId === "uncategorized"} class="category-item" type="button" title="未分类" onclick={() => (selectedCategoryId = "uncategorized")}>
+      <button class:active={selectedCategoryId === "uncategorized"} class="category-item" type="button" title="未分类" onclick={() => selectCategory("uncategorized")}>
         <span class="category-dot muted"></span>
         <span class="category-name">未分类</span>
         <span class="count">{vault?.uncategorizedCount ?? 0}</span>
@@ -459,7 +508,7 @@
         <div class="topbar-actions">
           <label class="search-box" aria-label="搜索账号">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
-            <input type="search" placeholder="搜索账号名、地址、邮箱或备注" disabled />
+            <input type="search" bind:value={searchQuery} oninput={() => void runSearch()} placeholder="搜索账号名、地址、邮箱或备注" disabled={status !== "ready"} />
           </label>
           <button class="secondary-button" type="button" onclick={refreshVault} disabled={status === "loading"}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
@@ -535,7 +584,7 @@
             <div class="panel-head table-heading">
               <div>
                 <h2>{selectedViewName()}</h2>
-                <p>{selectedAccountCount()} 个账号</p>
+                <p>{searchQuery.trim() ? `${visibleAccounts().length} 个匹配账号` : `${selectedAccountCount()} 个账号`}</p>
               </div>
               <label class="sort-control">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6M4 5v14" /></svg>
@@ -577,8 +626,8 @@
               {#if visibleAccounts().length === 0}
                 <div class="empty-state">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="3" /><path d="M8 10h8M8 14h5" /></svg>
-                  <strong>{status === "loading" ? "正在读取账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
-                  <span>{status === "loading" ? "请稍候" : "点击右上角“新增账号”保存第一条记录"}</span>
+                  <strong>{status === "loading" ? "正在读取账号" : searchStatus === "loading" ? "正在搜索账号" : searchStatus === "error" ? "搜索失败" : searchQuery.trim() ? "没有匹配账号" : selectedCategoryId === null ? "还没有保存账号" : "当前分类还没有账号"}</strong>
+                  <span>{status === "loading" || searchStatus === "loading" ? "请稍候" : searchStatus === "error" ? searchError : searchQuery.trim() ? "请尝试其他账号名、地址、邮箱或备注" : "点击右上角“新增账号”保存第一条记录"}</span>
                 </div>
               {/if}
             </div>
