@@ -471,8 +471,16 @@ h1 {
 }
 
 .overview-range {
-  padding: 0 10px;
+  padding: 0 7px;
   font-size: 10.5px;
+}
+
+.overview-range select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
 .overview-body {
@@ -505,42 +513,77 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-.chart-bars {
+.line-chart-stage {
   position: absolute;
-  inset: 19px 14px 20px 48px;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(26px, 1fr));
-  align-items: end;
-  gap: 6%;
+  inset: 15px 0 17px 34px;
 }
 
-.bar-group {
-  position: relative;
-  display: flex;
+.usage-lines {
+  display: block;
+  width: 100%;
   height: 100%;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
+  overflow: visible;
 }
 
-.usage-bar {
-  width: 9px;
-  border-radius: 3px 3px 0 0;
-  background: #d7d6ec;
+.usage-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
-.usage-bar.secondary { background: #dededb; }
+.usage-line.account { stroke: #6a66b5; }
+.usage-line.password { stroke: #d75c5c; }
 
-.bar-label {
+.usage-marker {
+  stroke: #fff;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.usage-marker.account { fill: #6a66b5; }
+.usage-marker.password { fill: #d75c5c; }
+
+.usage-tooltip {
   position: absolute;
-  bottom: -17px;
-  left: 50%;
-  width: 54px;
+  z-index: 2;
+  display: grid;
+  min-width: 142px;
+  gap: 4px;
   transform: translateX(-50%);
-  color: #9b9b98;
-  font-size: 9.5px;
-  text-align: center;
+  border: 1px solid #dfdfdc;
+  border-radius: 8px;
+  background: #fff;
+  padding: 7px 9px;
+  color: #555550;
+  box-shadow: 0 3px 10px rgb(24 24 22 / 10%);
+  font-size: 10px;
+  pointer-events: none;
 }
+
+.usage-tooltip strong {
+  color: #252522;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.usage-tooltip span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.usage-tooltip i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.usage-tooltip i.account { background: #6a66b5; }
+.usage-tooltip i.password { background: #d75c5c; }
 
 .overview-placeholder {
   position: relative;
@@ -596,7 +639,7 @@ h1 {
   background: #6a66b5;
 }
 
-.overview-foot i.muted { background: #aaa9a5; }
+.overview-foot i.password { background: #d75c5c; }
 
 .table-heading { align-items: center; }
 

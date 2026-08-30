@@ -68,11 +68,14 @@
   let revealSequence = 0;
   let credentialAction: { accountId: string; kind: "username" | "password" } | null = null;
   let accountSort: "recent" | "earliest" = "recent";
+  type UsageRangeDays = 7 | 30 | 180 | 365;
+  let usageRangeDays: UsageRangeDays = 7;
+  let hoveredUsageIndex: number | null = null;
+  let usageTooltipTop = 0;
 
   type UsageDay = {
     key: string;
-    label: string;
-    accountUses: number;
+    accountCopies: number;
     passwordCopies: number;
   };
 
@@ -84,7 +87,7 @@
   };
 
   let currentUsageChart: UsageChart;
-  $: currentUsageChart = usageChart(vault?.usageEvents ?? []);
+  $: currentUsageChart = usageChart(vault?.usageEvents ?? [], usageRangeDays);
 
   function emptyAccountDraft() {
     return {
@@ -285,21 +288,19 @@
     return `${date.getFullYear()}-${month}-${day}`;
   }
 
-  /** Rust 只返回最小事件摘要；自然日边界由运行界面的本地时区决定。 */
-  function usageChart(events: UsageEvent[]): UsageChart {
+  /** Rust 只返回最小事件摘要；自然日边界和时间范围由当前界面按本地时区决定。 */
+  function usageChart(events: UsageEvent[], rangeDays: UsageRangeDays): UsageChart {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
     const days: UsageDay[] = [];
     const byKey = new Map<string, UsageDay>();
 
-    for (let offset = 6; offset >= 0; offset -= 1) {
+    for (let offset = rangeDays - 1; offset >= 0; offset -= 1) {
       const date = new Date(today);
       date.setDate(today.getDate() - offset);
       const day: UsageDay = {
         key: localDayKey(date),
-        label: offset === 0 ? "今天" : weekdays[date.getDay()],
-        accountUses: 0,
+        accountCopies: 0,
         passwordCopies: 0,
       };
       days.push(day);
@@ -310,13 +311,13 @@
       if (!Number.isFinite(event.occurredAt)) continue;
       const day = byKey.get(localDayKey(new Date(event.occurredAt)));
       if (!day) continue;
-      // 密码复制本身也是一次账号使用，因此第一组柱子统计所有成功复制事件。
-      day.accountUses += 1;
+      // 两种复制动作分别计数，密码复制不能同时抬高账号复制折线。
+      if (event.kind === "accountUse") day.accountCopies += 1;
       if (event.kind === "passwordCopy") day.passwordCopies += 1;
     }
 
     const highest = days.reduce(
-      (maximum, day) => Math.max(maximum, day.accountUses, day.passwordCopies),
+      (maximum, day) => Math.max(maximum, day.accountCopies, day.passwordCopies),
       0,
     );
     const maximum = Math.max(3, Math.ceil(highest / 3) * 3);
@@ -326,6 +327,58 @@
       ticks: [maximum, maximum * 2 / 3, maximum / 3, 0],
       hasData: highest > 0,
     };
+  }
+
+  function usagePointX(index: number, pointCount: number): number {
+    return pointCount <= 1 ? 0 : (index / (pointCount - 1)) * 1000;
+  }
+
+  function usagePointY(value: number, maximum: number): number {
+    return 6 + (1 - value / maximum) * 108;
+  }
+
+  function usageLinePoints(metric: "accountCopies" | "passwordCopies"): string {
+    return currentUsageChart.days
+      .map((day, index) => `${usagePointX(index, currentUsageChart.days.length)},${usagePointY(day[metric], currentUsageChart.maximum)}`)
+      .join(" ");
+  }
+
+  function usageDateLabel(key: string): string {
+    const [year, month, day] = key.split("-");
+    return `${year}年${Number(month)}月${Number(day)}日`;
+  }
+
+  /** 只有指针靠近任一折线时才显示最近自然日的数据卡片。 */
+  function handleUsageChartPointerMove(event: PointerEvent) {
+    const stage = event.currentTarget as HTMLElement;
+    const rect = stage.getBoundingClientRect();
+    if (!rect.width || !rect.height || currentUsageChart.days.length === 0) return;
+
+    const localX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const localY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    const index = Math.round((localX / rect.width) * (currentUsageChart.days.length - 1));
+    const day = currentUsageChart.days[index];
+    const accountY = (usagePointY(day.accountCopies, currentUsageChart.maximum) / 120) * rect.height;
+    const passwordY = (usagePointY(day.passwordCopies, currentUsageChart.maximum) / 120) * rect.height;
+
+    if (Math.min(Math.abs(localY - accountY), Math.abs(localY - passwordY)) > 16) {
+      hoveredUsageIndex = null;
+      return;
+    }
+
+    hoveredUsageIndex = index;
+    usageTooltipTop = Math.max(4, Math.min(rect.height - 78, Math.min(accountY, passwordY) - 72));
+  }
+
+  function clearUsageHover() {
+    hoveredUsageIndex = null;
+  }
+
+  function usageTooltipLeft(index: number): number {
+    const raw = currentUsageChart.days.length <= 1
+      ? 50
+      : (index / (currentUsageChart.days.length - 1)) * 100;
+    return Math.max(12, Math.min(88, raw));
   }
 
   function accountCategoryName(categoryId: string | null): string {
@@ -810,29 +863,57 @@
             <div class="panel-head">
               <div>
                 <h2>使用概览</h2>
-                <p>查看最近一周账号的使用情况</p>
+                <p>查看所选时间范围内的复制情况</p>
               </div>
               <div class="overview-actions">
                 <button class="overview-refresh" type="button" onclick={refreshVault} aria-label="刷新使用概览" title="刷新使用概览">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg>
                 </button>
-                <span class="overview-range">近 7 天</span>
+                <label class="overview-range">
+                  <select bind:value={usageRangeDays} onchange={clearUsageHover} aria-label="使用概览时间范围">
+                    <option value={7}>近 7 天</option>
+                    <option value={30}>近一个月</option>
+                    <option value={180}>近半年</option>
+                    <option value={365}>近一年</option>
+                  </select>
+                </label>
               </div>
             </div>
             {#if currentUsageChart.hasData}
-              <div class="overview-body" aria-label="最近七天账号使用柱状图">
+              <div class="overview-body" aria-label="账号复制和密码复制折线图">
                 <div class="chart-grid"><span></span><span></span><span></span><span></span></div>
                 <div class="chart-labels">
                   {#each currentUsageChart.ticks as tick}<span>{tick}</span>{/each}
                 </div>
-                <div class="chart-bars">
-                  {#each currentUsageChart.days as day}
-                    <div class="bar-group" title={`${day.label}：账号使用 ${day.accountUses} 次，密码复制 ${day.passwordCopies} 次`}>
-                      <i class="usage-bar" style={`height: ${(day.accountUses / currentUsageChart.maximum) * 100}%`}></i>
-                      <i class="usage-bar secondary" style={`height: ${(day.passwordCopies / currentUsageChart.maximum) * 100}%`}></i>
-                      <span class="bar-label">{day.label}</span>
+                <div
+                  class="line-chart-stage"
+                  role="img"
+                  aria-label="紫色为账号复制次数，红色为密码复制次数；靠近折线可查看当日详情"
+                  onpointermove={handleUsageChartPointerMove}
+                  onpointerleave={clearUsageHover}
+                >
+                  <svg class="usage-lines" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline class="usage-line account" points={usageLinePoints("accountCopies")} />
+                    <polyline class="usage-line password" points={usageLinePoints("passwordCopies")} />
+                    {#if hoveredUsageIndex !== null}
+                      {@const hoveredDay = currentUsageChart.days[hoveredUsageIndex]}
+                      {@const hoveredX = usagePointX(hoveredUsageIndex, currentUsageChart.days.length)}
+                      <circle class="usage-marker account" cx={hoveredX} cy={usagePointY(hoveredDay.accountCopies, currentUsageChart.maximum)} r="4" />
+                      <circle class="usage-marker password" cx={hoveredX} cy={usagePointY(hoveredDay.passwordCopies, currentUsageChart.maximum)} r="4" />
+                    {/if}
+                  </svg>
+                  {#if hoveredUsageIndex !== null}
+                    {@const hoveredDay = currentUsageChart.days[hoveredUsageIndex]}
+                    <div
+                      class="usage-tooltip"
+                      role="status"
+                      style={`left: ${usageTooltipLeft(hoveredUsageIndex)}%; top: ${usageTooltipTop}px`}
+                    >
+                      <strong>{usageDateLabel(hoveredDay.key)}</strong>
+                      <span><i class="account"></i>账号复制 {hoveredDay.accountCopies} 次</span>
+                      <span><i class="password"></i>密码复制 {hoveredDay.passwordCopies} 次</span>
                     </div>
-                  {/each}
+                  {/if}
                 </div>
               </div>
             {:else}
@@ -844,8 +925,8 @@
               </div>
             {/if}
             <div class="overview-foot">
-              <span><i></i>账号使用</span>
-              <span><i class="muted"></i>密码复制</span>
+              <span><i></i>账号复制</span>
+              <span><i class="password"></i>密码复制</span>
             </div>
           </section>
           {/if}
