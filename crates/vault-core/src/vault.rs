@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    AccountError, CategoryError, MoveAccountError, UpdateAccountError, VaultValidationError,
+    AccountError, CategoryError, DeleteAccountError, MoveAccountError, UpdateAccountError,
+    VaultValidationError,
 };
 
 /// 当前代码能够完整理解和校验的密码库结构版本。
@@ -176,6 +177,18 @@ impl VaultDocument {
         }
 
         self.accounts[account_index].category_id = category_id;
+        Ok(())
+    }
+
+    /// 只按稳定 ID 删除一条账号记录，不使用列表位置或可重复的业务字段定位。
+    pub fn delete_account(&mut self, id: Uuid) -> Result<(), DeleteAccountError> {
+        let account_index = self
+            .accounts
+            .iter()
+            .position(|account| account.id == id)
+            .ok_or(DeleteAccountError::NotFound)?;
+
+        self.accounts.remove(account_index);
         Ok(())
     }
 
@@ -707,6 +720,54 @@ mod tests {
         assert_eq!(
             document.move_account(account.id, Some(Uuid::new_v4())),
             Err(MoveAccountError::CategoryNotFound)
+        );
+        assert_eq!(document, confirmed);
+    }
+
+    #[test]
+    fn delete_account_removes_only_the_stable_id_target() {
+        let mut document = VaultDocument::empty();
+        let input = |username: &str| CreateAccount {
+            category_id: None,
+            username: username.to_owned(),
+            password: "测试密码".to_owned(),
+            address: Some("https://same.invalid".to_owned()),
+            email: None,
+            notes: None,
+        };
+        let target = document
+            .create_account(input("待删除账号"))
+            .expect("目标账号应创建成功");
+        let retained = document
+            .create_account(input("保留账号"))
+            .expect("同地址账号应创建成功");
+
+        document
+            .delete_account(target.id)
+            .expect("目标账号应删除成功");
+
+        assert_eq!(document.accounts, vec![retained]);
+        assert_eq!(document.validate(), Ok(()));
+    }
+
+    #[test]
+    fn delete_account_rejects_unknown_id_without_mutation() {
+        let mut document = VaultDocument::empty();
+        document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "保留账号".to_owned(),
+                password: "测试密码".to_owned(),
+                address: None,
+                email: None,
+                notes: None,
+            })
+            .expect("账号应创建成功");
+        let confirmed = document.clone();
+
+        assert_eq!(
+            document.delete_account(Uuid::new_v4()),
+            Err(DeleteAccountError::NotFound)
         );
         assert_eq!(document, confirmed);
     }

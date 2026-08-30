@@ -66,3 +66,10 @@ pub enum MoveAccountError {
     #[error("账号分类不存在")]
     CategoryNotFound,
 }
+
+/// 删除账号返回的稳定错误，不携带被删除记录的任何字段。
+#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+pub enum DeleteAccountError {
+    #[error("账号不存在")]
+    NotFound,
+}

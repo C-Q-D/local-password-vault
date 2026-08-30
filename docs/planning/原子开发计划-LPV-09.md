@@ -21,7 +21,7 @@
 
 ## LPV-09-01 按稳定 ID 删除账号候选
 
-- 状态：in_progress
+- 状态：done
 - 唯一目标：`vault-core` 支持按账号 UUID 精确移除一条记录。
 - 允许修改：核心删除行为、稳定错误和单元测试。
 - 明确不修改：持久化、Tauri、前端、回收站和批量删除。
@@ -32,9 +32,13 @@
 - 风险等级：L1。
 - 计划提交信息：`feat(core): [LPV-09-01] 支持删除账号候选`
 
+### 执行记录
+
+- 实际验证：精确删除和未知 ID 不修改候选共 2 项定向测试通过；`cargo check -p vault-core`、格式和差异检查通过。
+
 ## LPV-09-02 暴露账号删除持久化命令
 
-- 状态：pending
+- 状态：in_progress
 - 唯一目标：应用层、Tauri 和 TypeScript 提供 `deleteAccount(id)`，成功返回最新安全快照。
 - 允许修改：应用删除用例、Tauri command、TypeScript 调用和相关测试。
 - 明确不修改：Svelte 确认框、回收站和批量操作。
