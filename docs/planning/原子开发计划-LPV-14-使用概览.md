@@ -49,7 +49,7 @@
 
 ## LPV-14-02 暴露安全的使用事件摘要
 
-- 状态：pending
+- 状态：done
 - 支持的验收场景：前端从每次真实密码库快照获得事件类型和时间，响应不包含账号身份或凭据。
 - 唯一目标：沿现有 `VaultSnapshot → VaultStatusDto → VaultStatus` 暴露安全使用事件。
 - 当前行为与目标行为：当前快照没有使用历史；完成后 Ready 快照和复制成功响应都携带同一事件摘要。
@@ -69,6 +69,10 @@
 - 风险等级：L2。
 - DDD 门禁：直接序列化测试足以证明字段边界时不触发。
 - 计划提交信息：`feat(app): [LPV-14-02] 暴露使用事件摘要`。
+
+### 执行记录
+
+- 实际验证：应用快照聚焦测试和 Tauri 安全 DTO 测试通过；`vault-app` 与 Tauri Crate check 通过；`svelte-check` 通过（0 error、0 warning）；Tauri Debug 增量编译并重新运行成功；格式和 diff 检查通过。
 
 ## LPV-14-03 渲染近 7 天使用柱状图
 

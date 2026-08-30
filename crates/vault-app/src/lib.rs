@@ -29,6 +29,13 @@ pub struct AccountSummary {
     pub last_used_at: Option<u64>,
 }
 
+/// 使用概览事件不携带账号身份，只允许前端按时间和动作类型聚合。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsageEventSummary {
+    pub kind: UsageEventKind,
+    pub occurred_at: u64,
+}
+
 /// 前端传入的搜索范围；分类 ID 仍由应用层在当前确认状态中解析和验证。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccountSearchScopeInput {
@@ -96,6 +103,7 @@ pub struct VaultSnapshot {
     pub categories: Vec<CategorySummary>,
     pub uncategorized_count: usize,
     pub accounts: Vec<AccountSummary>,
+    pub usage_events: Vec<UsageEventSummary>,
 }
 
 /// 应用层只依赖保存确认和固定备份恢复，不接触平台路径或文件原语。
@@ -650,6 +658,15 @@ fn snapshot_from(state: &ConfirmedState) -> VaultSnapshot {
                 address: account.address.clone(),
                 email: account.email.clone(),
                 last_used_at: account.last_used_at,
+            })
+            .collect(),
+        usage_events: state
+            .document
+            .usage_events
+            .iter()
+            .map(|event| UsageEventSummary {
+                kind: event.kind,
+                occurred_at: event.occurred_at,
             })
             .collect(),
     }
@@ -1411,15 +1428,8 @@ mod tests {
 
         assert_eq!(updated.accounts[0].last_used_at, Some(1_700_000_000_123));
         assert_eq!(
-            application
-                .state
-                .lock()
-                .expect("状态锁应可用")
-                .confirmed()
-                .expect("应为确认状态")
-                .document
-                .usage_events,
-            vec![vault_core::UsageEvent {
+            updated.usage_events,
+            vec![UsageEventSummary {
                 kind: UsageEventKind::PasswordCopy,
                 occurred_at: 1_700_000_000_123,
             }]

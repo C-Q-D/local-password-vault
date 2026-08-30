@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use vault_app::{
     AccountEditDetail, AccountSearchScopeInput, AccountSearchSnapshot, AccountSummary,
-    CategorySummary, CreateAccountInput, CredentialField, UpdateAccountInput, VaultApplication,
-    VaultApplicationError, VaultApplicationStatus, VaultSnapshot,
+    CategorySummary, CreateAccountInput, CredentialField, UpdateAccountInput, UsageEventSummary,
+    VaultApplication, VaultApplicationError, VaultApplicationStatus, VaultSnapshot,
 };
 use vault_core::UsageEventKind;
 
@@ -39,6 +39,21 @@ pub(crate) struct AccountDto {
     address: Option<String>,
     email: Option<String>,
     last_used_at: Option<u64>,
+}
+
+/// IPC 事件只保留图表所需字段，动作类型显式映射为稳定的 camelCase 值。
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UsageEventDto {
+    kind: UsageEventKindDto,
+    occurred_at: u64,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum UsageEventKindDto {
+    AccountUse,
+    PasswordCopy,
 }
 
 /// 新增账号请求仅在 command 调用期间持有明文密码，不写日志也不放入响应。
@@ -131,6 +146,7 @@ pub(crate) struct VaultStatusDto {
     categories: Vec<CategoryDto>,
     uncategorized_count: usize,
     accounts: Vec<AccountDto>,
+    usage_events: Vec<UsageEventDto>,
 }
 
 impl From<VaultSnapshot> for VaultStatusDto {
@@ -151,6 +167,11 @@ impl From<VaultSnapshot> for VaultStatusDto {
                 .accounts
                 .into_iter()
                 .map(AccountDto::from)
+                .collect(),
+            usage_events: snapshot
+                .usage_events
+                .into_iter()
+                .map(UsageEventDto::from)
                 .collect(),
         }
     }
@@ -186,6 +207,18 @@ impl From<AccountSummary> for AccountDto {
             address: account.address,
             email: account.email,
             last_used_at: account.last_used_at,
+        }
+    }
+}
+
+impl From<UsageEventSummary> for UsageEventDto {
+    fn from(event: UsageEventSummary) -> Self {
+        Self {
+            kind: match event.kind {
+                UsageEventKind::AccountUse => UsageEventKindDto::AccountUse,
+                UsageEventKind::PasswordCopy => UsageEventKindDto::PasswordCopy,
+            },
+            occurred_at: event.occurred_at,
         }
     }
 }
@@ -551,6 +584,10 @@ mod tests {
                 email: None,
                 last_used_at: Some(1_700_000_000_123),
             }],
+            usage_events: vec![UsageEventSummary {
+                kind: UsageEventKind::PasswordCopy,
+                occurred_at: 1_700_000_000_123,
+            }],
         });
 
         assert_eq!(dto.categories[0].name, "工作");
@@ -559,6 +596,13 @@ mod tests {
         assert_eq!(dto.accounts[0].username, "测试账号");
         assert_eq!(dto.accounts[0].category_id.as_deref(), Some("safe-id"));
         assert_eq!(dto.accounts[0].last_used_at, Some(1_700_000_000_123));
+        assert_eq!(
+            dto.usage_events,
+            vec![UsageEventDto {
+                kind: UsageEventKindDto::PasswordCopy,
+                occurred_at: 1_700_000_000_123,
+            }]
+        );
     }
 
     #[test]

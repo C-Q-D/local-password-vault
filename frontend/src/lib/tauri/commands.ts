@@ -17,6 +17,12 @@ export type AccountSummary = {
   lastUsedAt: number | null;
 };
 
+/** 使用事件不含账号身份或凭据，只用于本地近七天聚合。 */
+export type UsageEvent = {
+  kind: "accountUse" | "passwordCopy";
+  occurredAt: number;
+};
+
 export type CreateAccountInput = {
   categoryId: string | null;
   username: string;
@@ -63,6 +69,7 @@ export type VaultStatus = {
   categories: CategorySummary[];
   uncategorizedCount: number;
   accounts: AccountSummary[];
+  usageEvents: UsageEvent[];
 };
 
 /** 启动判别联合只在 Ready 分支携带安全摘要。 */
