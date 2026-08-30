@@ -1902,6 +1902,7 @@ dependencies = [
  "vault-core",
  "vault-platform-windows",
  "vault-storage",
+ "zeroize",
 ]
 
 [[package]]

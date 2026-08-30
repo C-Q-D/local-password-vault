@@ -82,7 +82,7 @@
 
 ## LPV-11-03 Tauri 凭据 command
 
-- 状态：pending
+- 状态：done
 - 支持的验收场景：前端可显示密码，复制操作不接收明文响应。
 - 唯一目标：注册显示密码、复制账号名和复制密码三个窄 command，并映射安全错误。
 - 当前行为与目标行为：当前 Tauri 只有完整编辑详情 command；完成后列表操作使用独立 IPC。
@@ -102,6 +102,10 @@
 - 风险等级：L2
 - DDD 门禁：若 DTO 或错误无法通过直接测试证明安全形状则执行隔离质疑。
 - 计划提交信息：`feat(commands): [LPV-11-03] 暴露凭据显示与复制接口`
+
+### 执行记录
+
+- 实际验证：`cargo test -p local-password-vault commands::vault` 通过（6 项）；`cargo check -p local-password-vault` 通过；运行中的 `tauri dev` 完成增量重编译并重新启动真实窗口。
 
 ## LPV-11-04 Svelte 列表凭据操作
 

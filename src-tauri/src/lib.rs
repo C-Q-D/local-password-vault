@@ -15,6 +15,9 @@ pub fn run() {
             commands::vault::delete_category,
             commands::vault::create_account,
             commands::vault::load_account_for_edit,
+            commands::vault::reveal_account_password,
+            commands::vault::copy_account_username,
+            commands::vault::copy_account_password,
             commands::vault::search_accounts,
             commands::vault::update_account,
             commands::vault::delete_account
@@ -29,7 +32,8 @@ fn setup_windows(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     use vault_app::{VaultApplication, VaultRepository};
     use vault_core::VaultDocument;
     use vault_platform_windows::{
-        atomic_file::WindowsVaultFiles, dpapi::DpapiKeyProtector, process_lock::ProcessLockGuard,
+        atomic_file::WindowsVaultFiles, clipboard::WindowsClipboard, dpapi::DpapiKeyProtector,
+        process_lock::ProcessLockGuard,
     };
     use vault_storage::{VaultOpenError, open_or_initialize, save_confirmed};
 
@@ -52,6 +56,11 @@ fn setup_windows(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     let instance_guard = ProcessLockGuard::acquire(&data_root)?;
     let files = WindowsVaultFiles::new(&data_root);
     let opened_vault = open_or_initialize(&files, &DpapiKeyProtector)?;
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("找不到主窗口，无法初始化剪贴板")?;
+    let owner_hwnd = main_window.hwnd()?.0 as isize;
+    app.manage(WindowsClipboard::new(owner_hwnd)?);
     app.manage(VaultApplication::new(
         instance_guard,
         opened_vault,

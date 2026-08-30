@@ -17,6 +17,7 @@ tauri = { version = "=2.11.5", features = [] }
 vault-app = { path = "../crates/vault-app" }
 vault-core = { path = "../crates/vault-core" }
 vault-storage = { path = "../crates/vault-storage" }
+zeroize = "1.9.0"
 
 [target.'cfg(windows)'.dependencies]
 vault-platform-windows = { path = "../crates/vault-platform-windows" }

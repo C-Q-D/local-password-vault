@@ -2,9 +2,19 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use vault_app::{
     AccountEditDetail, AccountSearchScopeInput, AccountSearchSnapshot, AccountSummary,
-    CategorySummary, CreateAccountInput, UpdateAccountInput, VaultApplication,
+    CategorySummary, CreateAccountInput, CredentialField, UpdateAccountInput, VaultApplication,
     VaultApplicationError, VaultSnapshot,
 };
+
+#[cfg(target_os = "windows")]
+use std::{thread, time::Duration};
+#[cfg(target_os = "windows")]
+use vault_platform_windows::clipboard::{ClipboardError, WindowsClipboard};
+#[cfg(target_os = "windows")]
+use zeroize::Zeroizing;
+
+#[cfg(target_os = "windows")]
+const PASSWORD_CLEAR_DELAY: Duration = Duration::from_secs(30);
 
 /// 分类安全摘要；账号数由 Rust 当前确认文档计算。
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -49,6 +59,13 @@ pub(crate) struct AccountEditDto {
     address: Option<String>,
     email: Option<String>,
     notes: Option<String>,
+}
+
+/// 显示密码 command 只返回当前账号的一项明文，不扩张账号列表 DTO。
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RevealedPasswordDto {
+    password: String,
 }
 
 /// 搜索范围使用判别式 JSON，避免空字符串和特殊分类 ID 混用。
@@ -220,6 +237,28 @@ impl From<VaultApplicationError> for CommandErrorDto {
     }
 }
 
+#[cfg(target_os = "windows")]
+impl From<ClipboardError> for CommandErrorDto {
+    fn from(error: ClipboardError) -> Self {
+        match error {
+            ClipboardError::ContentContainsNul => Self {
+                code: "CLIPBOARD_CONTENT_UNSUPPORTED",
+                message: "凭据包含系统剪贴板不支持的字符",
+            },
+            ClipboardError::InvalidOwner | ClipboardError::Unavailable => Self {
+                code: "CLIPBOARD_UNAVAILABLE",
+                message: "系统剪贴板暂时不可用，请重试",
+            },
+            ClipboardError::FormatRegistrationFailed
+            | ClipboardError::AllocationFailed
+            | ClipboardError::WriteFailed => Self {
+                code: "CLIPBOARD_WRITE_FAILED",
+                message: "写入系统剪贴板失败，请重试",
+            },
+        }
+    }
+}
+
 #[tauri::command]
 pub(crate) fn load_vault(
     application: State<'_, VaultApplication>,
@@ -291,6 +330,81 @@ pub(crate) fn load_account_for_edit(
         .account_for_edit(&id)
         .map(AccountEditDto::from)
         .map_err(CommandErrorDto::from)
+}
+
+#[tauri::command]
+pub(crate) fn reveal_account_password(
+    id: String,
+    application: State<'_, VaultApplication>,
+) -> Result<RevealedPasswordDto, CommandErrorDto> {
+    application
+        .credential(&id, CredentialField::Password)
+        .map(|password| RevealedPasswordDto { password })
+        .map_err(CommandErrorDto::from)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub(crate) fn copy_account_username(
+    id: String,
+    application: State<'_, VaultApplication>,
+    clipboard: State<'_, WindowsClipboard>,
+) -> Result<(), CommandErrorDto> {
+    let username = application
+        .credential(&id, CredentialField::Username)
+        .map_err(CommandErrorDto::from)?;
+    clipboard
+        .copy_text(&username)
+        .map_err(CommandErrorDto::from)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub(crate) fn copy_account_password(
+    id: String,
+    application: State<'_, VaultApplication>,
+    clipboard: State<'_, WindowsClipboard>,
+) -> Result<(), CommandErrorDto> {
+    let password = Zeroizing::new(
+        application
+            .credential(&id, CredentialField::Password)
+            .map_err(CommandErrorDto::from)?,
+    );
+    let receipt = clipboard
+        .copy_password(&password)
+        .map_err(CommandErrorDto::from)?;
+
+    // 延迟任务只持有 Rust 清理凭证；command 立即返回，绝不把密码或 token 发给 WebView。
+    thread::spawn(move || {
+        thread::sleep(PASSWORD_CLEAR_DELAY);
+        let _ = receipt.clear_if_owned();
+    });
+    Ok(())
+}
+
+// macOS 平台适配尚未进入当前交付范围；保留同名 command 使通用 IPC 契约可迁移。
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub(crate) fn copy_account_username(
+    _id: String,
+    _application: State<'_, VaultApplication>,
+) -> Result<(), CommandErrorDto> {
+    Err(CommandErrorDto {
+        code: "CLIPBOARD_UNAVAILABLE",
+        message: "当前平台尚未提供剪贴板适配",
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub(crate) fn copy_account_password(
+    _id: String,
+    _application: State<'_, VaultApplication>,
+) -> Result<(), CommandErrorDto> {
+    Err(CommandErrorDto {
+        code: "CLIPBOARD_UNAVAILABLE",
+        message: "当前平台尚未提供剪贴板适配",
+    })
 }
 
 #[tauri::command]
@@ -422,6 +536,32 @@ mod tests {
         assert_eq!(dto.id, "account-id");
         assert_eq!(dto.password, "密码");
         assert_eq!(dto.notes.as_deref(), Some("备注"));
+    }
+
+    #[test]
+    fn revealed_password_dto_contains_only_requested_password() {
+        let dto = RevealedPasswordDto {
+            password: "一次性显示密码".to_owned(),
+        };
+
+        assert_eq!(dto.password, "一次性显示密码");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn clipboard_errors_map_to_stable_command_codes() {
+        assert_eq!(
+            CommandErrorDto::from(ClipboardError::ContentContainsNul).code,
+            "CLIPBOARD_CONTENT_UNSUPPORTED"
+        );
+        assert_eq!(
+            CommandErrorDto::from(ClipboardError::Unavailable).code,
+            "CLIPBOARD_UNAVAILABLE"
+        );
+        assert_eq!(
+            CommandErrorDto::from(ClipboardError::WriteFailed).code,
+            "CLIPBOARD_WRITE_FAILED"
+        );
     }
 
     #[test]
