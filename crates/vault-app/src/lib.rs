@@ -65,6 +65,13 @@ pub struct AccountEditDetail {
     pub notes: Option<String>,
 }
 
+/// 凭据操作每次只请求一个字段，避免为复制或显示动作加载完整编辑详情。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialField {
+    Username,
+    Password,
+}
+
 /// 账号编辑输入不包含账号 ID；字段和分类归属在同一候选保存中更新。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateAccountInput {
@@ -286,6 +293,30 @@ impl VaultApplication {
             address: account.address.clone(),
             email: account.email.clone(),
             notes: account.notes.clone(),
+        })
+    }
+
+    /// 按稳定 ID 从当前确认快照读取单项凭据；该只读操作不增加 revision 或触发保存。
+    pub fn credential(
+        &self,
+        id: &str,
+        field: CredentialField,
+    ) -> Result<String, VaultApplicationError> {
+        let account_id = Uuid::parse_str(id).map_err(|_| VaultApplicationError::AccountNotFound)?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| VaultApplicationError::StateUnavailable)?;
+        let account = state
+            .document
+            .accounts
+            .iter()
+            .find(|account| account.id == account_id)
+            .ok_or(VaultApplicationError::AccountNotFound)?;
+
+        Ok(match field {
+            CredentialField::Username => account.username.clone(),
+            CredentialField::Password => account.password.clone(),
         })
     }
 
@@ -1065,5 +1096,48 @@ mod tests {
             ),
             Err(VaultApplicationError::CategoryNotFound)
         );
+    }
+
+    #[test]
+    fn credential_reads_only_requested_confirmed_field_without_saving() {
+        let mut document = VaultDocument::empty();
+        document.revision = 9;
+        let target = document
+            .create_account(CreateAccount {
+                category_id: None,
+                username: "凭据账号".to_owned(),
+                password: "凭据密码".to_owned(),
+                address: Some("https://unused.invalid".to_owned()),
+                email: Some("unused@example.invalid".to_owned()),
+                notes: Some("不应由凭据接口返回".to_owned()),
+            })
+            .expect("测试账号应创建成功");
+        let (application, _, save_count) = application_with_document(false, document);
+
+        assert_eq!(
+            application.credential(&target.id.to_string(), CredentialField::Username),
+            Ok("凭据账号".to_owned())
+        );
+        assert_eq!(
+            application.credential(&target.id.to_string(), CredentialField::Password),
+            Ok("凭据密码".to_owned())
+        );
+        assert_eq!(application.snapshot().expect("快照应可读取").revision, 9);
+        assert_eq!(save_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn credential_rejects_invalid_or_unknown_account_without_saving() {
+        let (application, _, save_count) = application(false);
+
+        assert_eq!(
+            application.credential("invalid-id", CredentialField::Username),
+            Err(VaultApplicationError::AccountNotFound)
+        );
+        assert_eq!(
+            application.credential(&Uuid::new_v4().to_string(), CredentialField::Password),
+            Err(VaultApplicationError::AccountNotFound)
+        );
+        assert_eq!(save_count.load(Ordering::SeqCst), 0);
     }
 }
